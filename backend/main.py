@@ -2,6 +2,10 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from youtubesearchpython import VideosSearch as vss
 import yt_dlp 
+import vlc
+
+ins = vlc.Instance()
+player = ins.media_player_new()
 
 app = FastAPI()
 
@@ -31,6 +35,12 @@ async def ytsearch(query: str):
 
 @app.get("/watch")
 async def watch(url: str):
-    with yt_dlp.YoutubeDL({'format': 'best', 'quiet': True}) as ydl:
+    ydl_opts = {
+        'format': 'bestaudio/best',
+        'quiet': True,
+        'noplaylist': True,
+        'cookiesfrombrowser': ('chromium',) 
+    }
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=False)
-        return {"stream_url": info.get("url")}
+        return {"stream_url": info.get("url"), "title": info.get("title")}
