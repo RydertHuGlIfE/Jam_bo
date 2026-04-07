@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 import yt_dlp 
 import vlc
@@ -8,12 +8,17 @@ import asyncio
 import json
 import os
 from dotenv import load_dotenv
-import os 
-load_dotenv()
+
+# Load environment variables
+load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
 
 try:
-    user_dict = json.loads(os.getenv("APP_USERS", "{}"))
-except Exception:
+    auth_data = os.getenv("APP_USERS", "{}")
+    if auth_data.startswith(("'","\"")) and auth_data.endswith(("'","\"")):
+        auth_data = auth_data[1:-1]
+    user_dict = json.loads(auth_data)
+except Exception as e:
+    print(f"--- FAILED TO LOAD USERS: {e} ---")
     user_dict = {}
 
 app = FastAPI()
@@ -26,25 +31,110 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
+class Jammanager:
+    def __init__(self): 
+        # room_id -> set of WebSockets
+        self.rooms: dict[str, set[WebSocket]] = {}
+        # username -> active WebSocket
+        self.user_sess: dict[str, WebSocket] = {}
+        # room_id -> { "isPlaying": bool, "time": float }
+        self.room_states: dict[str, dict] = {}
 
-try:
-    auth_data = os.getenv("APP_USERS", "{}")
-    print(f"--- Debug: Raw APP_USERS from env: {auth_data} ---")
-    
-    # Robustly handle single quotes or other wrapping characters
-    if auth_data.startswith(("'","\"")) and auth_data.endswith(("'","\"")):
-        auth_data = auth_data[1:-1]
+    async def connect(self, room_id: str, username: str, ws: WebSocket):
+        await ws.accept()
         
-    user_dict = json.loads(auth_data)
-    print(f"--- Loaded {len(user_dict)} users from .env: {list(user_dict.keys())} ---")
-except Exception as e:
-    print(f"--- FAILED TO LOAD USERS: {e} ---")
-    user_dict = {}
+        # Single-session: Kick old socket
+        if username in self.user_sess:
+            try:
+                await self.user_sess[username].send_json({"type": "KICKED"})
+                await self.user_sess[username].close()
+            except:
+                pass
+        # Initial state sync
+        state = self.room_states.get(room_id, {})
+        await ws.send_json({"type": "SYNC", "state": state, "queue": track_queue})
+        
+        self.user_sess[username] = ws
+
+        # Join Room
+        if room_id not in self.rooms:
+            self.rooms[room_id] = set()
+            self.room_states[room_id] = {"isPlaying": False, "time": 0, "track": None}
+        self.rooms[room_id].add(ws)
+
+        # Initial Sync
+        try:
+            await ws.send_json({
+                "type": "SYNC", 
+                "state": self.room_states[room_id]
+            })
+        except:
+            pass
+
+    async def disconnect(self, room_id: str, username: str, ws: WebSocket):
+        if room_id in self.rooms:
+            self.rooms[room_id].discard(ws)
+            # Cleanup if room is empty
+            if not self.rooms[room_id]:
+                if room_id in self.rooms: del self.rooms[room_id]
+                if room_id in self.room_states: del self.room_states[room_id]
+                print(f"--- Jam Session {room_id} closed (all left) ---")
+
+        if self.user_sess.get(username) == ws:
+            del self.user_sess[username]
+
+    async def broadcast_all(self, message: dict):
+        for room_id in self.rooms:
+            for ws in list(self.rooms[room_id]):
+                try:
+                    await ws.send_json(message)
+                except:
+                    pass
+
+    async def broadcast(self, room_id: str, message: dict, sender: WebSocket):
+        for ws in list(self.rooms.get(room_id, [])):
+            try:
+                if ws != sender:
+                    await ws.send_json(message)
+            except:
+                pass
+
+manager = Jammanager()
+
+@app.websocket("/ws/{room_id}/{username}")
+async def jam_websocket(websocket: WebSocket, room_id: str, username: str):
+    await manager.connect(room_id, username, websocket)
+    try:
+        while True:
+            data = await websocket.receive_json()
+            
+            # Update source-of-truth state
+            type = data.get("type")
+            if type == "SEEK":
+                manager.room_states[room_id]["time"] = data.get("value", 0)
+            elif type == "PLAY_PAUSE":
+                manager.room_states[room_id]["isPlaying"] = data.get("value", False)
+            elif type == "TRACK_CHANGE":
+                manager.room_states[room_id]["track"] = data.get("track")
+                manager.room_states[room_id]["time"] = 0
+                manager.room_states[room_id]["isPlaying"] = True
+            elif type == "RESTART":
+                manager.room_states[room_id]["time"] = 0
+                manager.room_states[room_id]["isPlaying"] = True
+            elif type == "NEXT_TRACK":
+                pass
+                
+            # Broadcast to others in the same room
+            await manager.broadcast(room_id, data, websocket)
+    except WebSocketDisconnect:
+        await manager.disconnect(room_id, username, websocket)
+    except Exception:
+        await manager.disconnect(room_id, username, websocket)
 
 class LoginRequest(BaseModel):
     username: str
     password: str
+        
 
 @app.post("/login")
 async def login(request: LoginRequest):
@@ -117,6 +207,7 @@ async def add_queue(track: Track, top: bool = Query(False)):
         track_queue.insert(0, track.dict())
     else:
         track_queue.append(track.dict())
+    await manager.broadcast_all({"type": "QUEUE_UPDATE", "queue": track_queue})
     return {"queue": track_queue}
 
 
@@ -132,6 +223,7 @@ async def delete_track(index: int):
     
 
     del track_queue[index]
+    await manager.broadcast_all({"type": "QUEUE_UPDATE", "queue": track_queue})
     return {"queue": track_queue}
 
 @app.get("/queue/skip")
@@ -142,6 +234,7 @@ async def skip_to_track(index: int):
     
     del track_queue[0:index+1]
     
+    await manager.broadcast_all({"type": "QUEUE_UPDATE", "queue": track_queue})
     if target_track.get("cached_url"):
         print("cache found")
         return {
@@ -175,6 +268,7 @@ async def next_queue():
     next_track = track_queue.pop(0)
 
 
+    await manager.broadcast_all({"type": "QUEUE_UPDATE", "queue": track_queue})
     if next_track.get("cached_url"):
         print("cache found")
         return {
