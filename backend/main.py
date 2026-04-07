@@ -5,9 +5,16 @@ import vlc
 from pydantic import BaseModel
 from typing import Optional
 import asyncio
+import json
+import os
+from dotenv import load_dotenv
+import os 
+load_dotenv()
 
-ins = vlc.Instance()
-player = ins.media_player_new()
+try:
+    user_dict = json.loads(os.getenv("APP_USERS", "{}"))
+except Exception:
+    user_dict = {}
 
 app = FastAPI()
 
@@ -18,6 +25,45 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
+
+# Parse the users dictionary from .env
+try:
+    auth_data = os.getenv("APP_USERS", "{}")
+    print(f"--- Debug: Raw APP_USERS from env: {auth_data} ---")
+    
+    # Robustly handle single quotes or other wrapping characters
+    if auth_data.startswith(("'","\"")) and auth_data.endswith(("'","\"")):
+        auth_data = auth_data[1:-1]
+        
+    user_dict = json.loads(auth_data)
+    print(f"--- Loaded {len(user_dict)} users from .env: {list(user_dict.keys())} ---")
+except Exception as e:
+    print(f"--- FAILED TO LOAD USERS: {e} ---")
+    user_dict = {}
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+@app.post("/login")
+async def login(request: LoginRequest):
+    username = request.username.strip()
+    password = request.password.strip()
+    print(f"--- Login attempt --- User: [{username}] Password: [{password}]")
+    
+    if username not in user_dict:
+        print(f"--- Error: User [{username}] not found in {list(user_dict.keys())}")
+        return {"success": False, "message": "User not found"}
+        
+    stored_password = user_dict.get(username)
+    if stored_password == password:
+        print(f"--- Login SUCCESS for {username} ---")
+        return {"success": True, "message": "Login successful", "user": username}
+    else:
+        print(f"--- Error: Password mismatch for {username}. Expected: [{stored_password}], Got: [{password}]")
+        return {"success": False, "message": "Invalid password"}
 
 async def cacher_worker():
     while True:
