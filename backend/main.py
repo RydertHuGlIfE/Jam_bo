@@ -28,7 +28,6 @@ app.add_middleware(
 
 load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
 
-# Parse the users dictionary from .env
 try:
     auth_data = os.getenv("APP_USERS", "{}")
     print(f"--- Debug: Raw APP_USERS from env: {auth_data} ---")
@@ -123,6 +122,16 @@ async def add_queue(track: Track, top: bool = Query(False)):
 
 @app.get("/queue")
 async def get_queue():
+    return {"queue": track_queue}
+
+
+@app.get("/queue/delete")
+async def delete_track(index: int):
+    if not track_queue or index >= len(track_queue):
+        return {"message": "Invalid index or empty queue"}
+    
+
+    del track_queue[index]
     return {"queue": track_queue}
 
 @app.get("/queue/skip")
