@@ -1,15 +1,22 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 
 function App() {
   const [query, setQuery] = useState('')
   const [videos, setVideos] = useState([])
   const [loading, setLoading] = useState(false)
   const [streamUrl, setStreamUrl] = useState(null)
+  
+  // Custom Player State
+  const [isPlaying, setIsPlaying] = useState(false)
+  const [currentTime, setCurrentTime] = useState(0)
+  const [duration, setDuration] = useState(0)
+  const [currentTitle, setCurrentTitle] = useState('')
+  const audioRef = useRef(null)
 
   const handleSearch = async (e) => {
     e.preventDefault()
     if (!query) return
-
+    
     setLoading(true)
     setStreamUrl(null)
     try {
@@ -29,13 +36,36 @@ function App() {
       const response = await fetch(`http://127.0.0.1:8000/watch?url=${encodeURIComponent(url)}`)
       const data = await response.json()
       setStreamUrl(data.stream_url)
-      // Log for user to see, or we could open a player
-      console.log('Stream URL extracted:', data.stream_url)
+      setCurrentTitle(data.title || 'Unknown Track')
+      setIsPlaying(true)
     } catch (err) {
       console.error('Watch failed:', err)
     } finally {
       setLoading(false)
     }
+  }
+
+  const togglePlay = () => {
+    if (!audioRef.current) return
+    if (isPlaying) {
+      audioRef.current.pause()
+    } else {
+      audioRef.current.play()
+    }
+    setIsPlaying(!isPlaying)
+  }
+
+  const formatTime = (time) => {
+    if (isNaN(time)) return '0:00'
+    const mins = Math.floor(time / 60)
+    const secs = Math.floor(time % 60)
+    return `${mins}:${secs < 10 ? '0' : ''}${secs}`
+  }
+
+  const handleSeek = (e) => {
+    const time = Number(e.target.value)
+    audioRef.current.currentTime = time
+    setCurrentTime(time)
   }
 
   return (
@@ -56,20 +86,48 @@ function App() {
       </form>
 
       {streamUrl && (
-        <div style={{ marginBottom: '3rem', padding: '1.5rem', background: 'var(--surface-color)', borderRadius: '16px', border: '1px solid var(--glass-border)' }}>
-          <h3 style={{ marginBottom: '1rem' }}>Listening Mode Ready</h3>
+        <div className="custom-player">
+          <div className="player-info">
+            <h3>{currentTitle}</h3>
+            <p>Listening Mode Ready</p>
+          </div>
+          
           <audio 
-            controls 
-            autoPlay 
-            src={streamUrl} 
-            style={{ width: '100%', outline: 'none' }}
-          >
-            Your browser does not support the audio element.
-          </audio>
-          <div style={{ marginTop: '1rem' }}>
-            <a href={streamUrl} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>
-              Download / Direct Link
-            </a>
+            ref={audioRef}
+            src={streamUrl}
+            onTimeUpdate={() => setCurrentTime(audioRef.current.currentTime)}
+            onLoadedMetadata={() => setDuration(audioRef.current.duration)}
+            onEnded={() => setIsPlaying(false)}
+            onPlay={() => setIsPlaying(true)}
+            onPause={() => setIsPlaying(false)}
+            autoPlay
+          />
+
+          <div className="controls-row">
+            <button className="play-toggle" onClick={togglePlay}>
+              {isPlaying ? (
+                <svg viewBox="0 0 24 24" width="24" height="24" fill="black"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+              ) : (
+                <svg viewBox="0 0 24 24" width="24" height="24" fill="black"><path d="M8 5v14l11-7z"/></svg>
+              )}
+            </button>
+            
+            <div className="progress-container">
+              <span className="time-display">{formatTime(currentTime)}</span>
+              <input 
+                type="range" 
+                className="seek-bar"
+                min="0"
+                max={duration || 0}
+                value={currentTime}
+                onChange={handleSeek}
+              />
+              <span className="time-display">{formatTime(duration)}</span>
+            </div>
+          </div>
+
+          <div className="player-footer">
+            <a href={streamUrl} target="_blank" rel="noopener noreferrer">Download / Direct Link</a>
           </div>
         </div>
       )}
