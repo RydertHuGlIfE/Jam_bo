@@ -4,6 +4,7 @@ import yt_dlp
 import vlc
 from pydantic import BaseModel
 from typing import Optional
+import threading 
 
 ins = vlc.Instance()
 player = ins.media_player_new()
@@ -17,6 +18,24 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+async def cacher_worker():
+    while True:
+        for track in track_queue:
+            if track.get("cached_url") is None:
+                ydl_opts = {
+                    'format': 'bestaudio/best',
+                    'quiet': True,
+                    'noplaylist': True,
+                    'cookiesfrombrowser': ('chromium',) 
+                }
+                try:          
+                    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                        info = await asyncio.to_thread(ydl.extract_info, track['url'], download=False)
+                        track["cached_url"] = info.get("url")
+                except Exception as e:
+                    print("Error caching")
+        await asyncio.sleep(1)
 
 @app.get("/")
 async def root():
@@ -39,6 +58,7 @@ class Track(BaseModel):
     url: str
     title: str
     thumbnail: str
+    cached_url: Optional[str] = None
 
 @app.post("/queue/add")
 async def add_queue(track: Track, top: bool = Query(False)):
@@ -57,14 +77,10 @@ async def get_queue():
 async def skip_to_track(index: int):
     if not track_queue or index >= len(track_queue):
         return {"message": "Invalid index or empty queue"}
-    
-    # Identify the track to play
     target_track = track_queue[index]
     
-    # Skip all intermediate tracks up to and including the target
     del track_queue[0:index+1]
     
-    # Extract the stream URL for the selected track
     ydl_opts = {
         'format': 'bestaudio/best',
         'quiet': True,
