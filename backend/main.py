@@ -5,7 +5,6 @@ import yt_dlp
 
 app = FastAPI()
 
-# Enable CORS for the frontend
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -25,8 +24,9 @@ async def health_check():
 
 @app.get("/search")
 async def ytsearch(query: str):
-    vsearch = vss(query, limit=10)
-    return vsearch.result()
+    with yt_dlp.YoutubeDL({'quiet': True, 'extract_flat': True}) as ydl:
+        data = ydl.extract_info(f"ytsearch10:{query}", download=False)
+        return data
 
 
 @app.get("/watch")
