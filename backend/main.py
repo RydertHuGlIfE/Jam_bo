@@ -4,7 +4,7 @@ import yt_dlp
 import vlc
 from pydantic import BaseModel
 from typing import Optional
-import threading 
+import asyncio
 
 ins = vlc.Instance()
 player = ins.media_player_new()
@@ -27,15 +27,21 @@ async def cacher_worker():
                     'format': 'bestaudio/best',
                     'quiet': True,
                     'noplaylist': True,
-                    'cookiesfrombrowser': ('chromium',) 
+                    'cookiesfrombrowser': ('chromium',) ,
+                    'no_warnings': True
                 }
                 try:          
                     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                         info = await asyncio.to_thread(ydl.extract_info, track['url'], download=False)
                         track["cached_url"] = info.get("url")
+                        print(f"caching{track['title']} complete")
                 except Exception as e:
                     print("Error caching")
         await asyncio.sleep(1)
+
+@app.on_event("startup")
+async def startup_event():
+    asyncio.create_task(cacher_worker())
 
 @app.get("/")
 async def root():
@@ -81,20 +87,30 @@ async def skip_to_track(index: int):
     
     del track_queue[0:index+1]
     
-    ydl_opts = {
-        'format': 'bestaudio/best',
-        'quiet': True,
-        'noplaylist': True,
-        'cookiesfrombrowser': ('chromium',) 
-    }
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(target_track['url'], download=False)
+    if target_track.get("cached_url"):
+        print("cache found")
         return {
-            "stream_url": info.get("url"), 
-            "title": info.get("title"),
+            "stream_url": target_track.get("cached_url"), 
+            "title": target_track.get("title"),
             "thumbnail": target_track.get('thumbnail'),
             "queue": track_queue
         }
+    else:
+        ydl_opts = {
+            'format': 'bestaudio/best',
+            'quiet': True,
+            'noplaylist': True,
+            'cookiesfrombrowser': ('chromium',)  ,
+            'no_warnings': True
+        }
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(target_track['url'], download=False)
+            return {
+                "stream_url": info.get("url"), 
+                "title": info.get("title"),
+                "thumbnail": target_track.get('thumbnail'),
+                "queue": track_queue
+            }
 
 @app.get("/queue/next")
 async def next_queue():
@@ -103,17 +119,28 @@ async def next_queue():
     
     next_track = track_queue.pop(0)
 
-    ydl_opts = {
-        'format': 'bestaudio/best',
-        'quiet': True,
-        'noplaylist': True,
-        'cookiesfrombrowser': ('chromium',) 
-    }
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(next_track['url'], download=False)
+
+    if next_track.get("cached_url"):
+        print("cache found")
         return {
-            "stream_url": info.get("url"), 
-            "title": info.get("title"),
+            "stream_url": next_track.get("cached_url"), 
+            "title": next_track.get("title"),
             "thumbnail": next_track.get('thumbnail'),
             "queue": track_queue
         }
+    else:
+        ydl_opts = {
+            'format': 'bestaudio/best',
+            'quiet': True,
+            'noplaylist': True,
+            'cookiesfrombrowser': ('chromium',) ,
+            'no_warnings': True
+        }
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(next_track['url'], download=False)
+            return {
+                "stream_url": info.get("url"), 
+                "title": info.get("title"),
+                "thumbnail": next_track.get('thumbnail'),
+                "queue": track_queue
+            }
