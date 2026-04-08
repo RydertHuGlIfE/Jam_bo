@@ -9,7 +9,6 @@ import json
 import os
 from dotenv import load_dotenv
 
-# Load environment variables
 load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
 
 try:
@@ -33,43 +32,38 @@ app.add_middleware(
 
 class Jammanager:
     def __init__(self): 
-        # room_id -> set of WebSockets
         self.rooms: dict[str, set[WebSocket]] = {}
-        # username -> active WebSocket
         self.user_sess: dict[str, WebSocket] = {}
         # room_id -> { "isPlaying": bool, "time": float }
         self.room_states: dict[str, dict] = {}
+        # room_id -> list of tracks
+        self.room_queues: dict[str, list] = {}
 
     async def connect(self, room_id: str, username: str, ws: WebSocket):
         await ws.accept()
-        
-        # Single-session: Kick old socket
+
+        #if user 2 device login = kick the hell outta him 
         if username in self.user_sess:
             try:
                 await self.user_sess[username].send_json({"type": "KICKED"})
                 await self.user_sess[username].close()
             except:
                 pass
-        # Initial state sync
-        state = self.room_states.get(room_id, {})
-        await ws.send_json({"type": "SYNC", "state": state, "queue": track_queue})
-        
-        self.user_sess[username] = ws
-
-        # Join Room
         if room_id not in self.rooms:
             self.rooms[room_id] = set()
             self.room_states[room_id] = {"isPlaying": False, "time": 0, "track": None}
+            self.room_queues[room_id] = []
+        
+        await ws.send_json({
+            "type": "SYNC", 
+            "state": self.room_states[room_id],
+            "queue": self.room_queues[room_id]
+        })
+        
+        await self.broadcast(room_id, {"type": "PING", "user": username}, ws)
+        
         self.rooms[room_id].add(ws)
-
-        # Initial Sync
-        try:
-            await ws.send_json({
-                "type": "SYNC", 
-                "state": self.room_states[room_id]
-            })
-        except:
-            pass
+        self.user_sess[username] = ws
 
     async def disconnect(self, room_id: str, username: str, ws: WebSocket):
         if room_id in self.rooms:
@@ -78,18 +72,15 @@ class Jammanager:
             if not self.rooms[room_id]:
                 if room_id in self.rooms: del self.rooms[room_id]
                 if room_id in self.room_states: del self.room_states[room_id]
+                if room_id in self.room_queues: del self.room_queues[room_id]
                 print(f"--- Jam Session {room_id} closed (all left) ---")
 
         if self.user_sess.get(username) == ws:
             del self.user_sess[username]
 
-    async def broadcast_all(self, message: dict):
-        for room_id in self.rooms:
-            for ws in list(self.rooms[room_id]):
-                try:
-                    await ws.send_json(message)
-                except:
-                    pass
+    async def broadcast_room_queue(self, room_id: str):
+        queue = self.room_queues.get(room_id, [])
+        await self.broadcast(room_id, {"type": "QUEUE_UPDATE", "queue": queue}, None)
 
     async def broadcast(self, room_id: str, message: dict, sender: WebSocket):
         for ws in list(self.rooms.get(room_id, [])):
@@ -113,7 +104,11 @@ async def jam_websocket(websocket: WebSocket, room_id: str, username: str):
             if type == "SEEK":
                 manager.room_states[room_id]["time"] = data.get("value", 0)
             elif type == "PLAY_PAUSE":
-                manager.room_states[room_id]["isPlaying"] = data.get("value", False)
+                val = data.get("value")
+                is_playing = val if isinstance(val, bool) else val.get("value") if isinstance(val, dict) else False
+                manager.room_states[room_id]["isPlaying"] = is_playing
+                if isinstance(val, dict) and "time" in val:
+                    manager.room_states[room_id]["time"] = val["time"]
             elif type == "TRACK_CHANGE":
                 manager.room_states[room_id]["track"] = data.get("track")
                 manager.room_states[room_id]["time"] = 0
@@ -123,6 +118,9 @@ async def jam_websocket(websocket: WebSocket, room_id: str, username: str):
                 manager.room_states[room_id]["isPlaying"] = True
             elif type == "NEXT_TRACK":
                 pass
+            elif type == "PULSE":
+                manager.room_states[room_id]["time"] = data.get("value", data.get("time", 0))
+                continue # Do not broadcast pulses
                 
             # Broadcast to others in the same room
             await manager.broadcast(room_id, data, websocket)
@@ -135,6 +133,8 @@ class LoginRequest(BaseModel):
     username: str
     password: str
         
+
+track_queue = []
 
 @app.post("/login")
 async def login(request: LoginRequest):
@@ -169,7 +169,7 @@ async def cacher_worker():
                     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                         info = await asyncio.to_thread(ydl.extract_info, track['url'], download=False)
                         track["cached_url"] = info.get("url")
-                        print(f"caching{track['title']} complete")
+                        print(f"caching: {track['title']} complete")
                 except Exception as e:
                     print("Error caching")
         await asyncio.sleep(1)
@@ -193,55 +193,59 @@ async def ytsearch(query: str):
         data = ydl.extract_info(f"ytsearch10:{query}", download=False)
         return data
 
-track_queue = []
-
-class Track(BaseModel):
-    url: str
-    title: str
-    thumbnail: str
-    cached_url: Optional[str] = None
-
 @app.post("/queue/add")
-async def add_queue(track: Track, top: bool = Query(False)):
+async def add_queue(track: Track, top: bool = Query(False), jam_id: str = "global"):
+    if jam_id not in manager.room_queues:
+        manager.room_queues[jam_id] = []
+    
+    q = manager.room_queues[jam_id]
     if top:
-        track_queue.insert(0, track.dict())
+        q.insert(0, track.model_dump())
     else:
-        track_queue.append(track.dict())
-    await manager.broadcast_all({"type": "QUEUE_UPDATE", "queue": track_queue})
-    return {"queue": track_queue}
+        q.append(track.model_dump())
+    
+    await manager.broadcast_room_queue(jam_id)
+    return {"queue": q}
 
 
 @app.get("/queue")
-async def get_queue():
-    return {"queue": track_queue}
+async def get_queue(jam_id: str = "global"):
+    return {"queue": manager.room_queues.get(jam_id, [])}
 
 
 @app.get("/queue/delete")
-async def delete_track(index: int):
-    if not track_queue or index >= len(track_queue):
+async def delete_track(index: int, jam_id: str = "global"):
+    q = manager.room_queues.get(jam_id, [])
+    if not q or index >= len(q):
         return {"message": "Invalid index or empty queue"}
     
-
-    del track_queue[index]
-    await manager.broadcast_all({"type": "QUEUE_UPDATE", "queue": track_queue})
-    return {"queue": track_queue}
+    del q[index]
+    await manager.broadcast_room_queue(jam_id)
+    return {"queue": q}
 
 @app.get("/queue/skip")
-async def skip_to_track(index: int):
-    if not track_queue or index >= len(track_queue):
+async def skip_to_track(index: int, jam_id: str = "global"):
+    q = manager.room_queues.get(jam_id, [])
+    if not q or index >= len(q):
         return {"message": "Invalid index or empty queue"}
-    target_track = track_queue[index]
+    target_track = q[index]
     
-    del track_queue[0:index+1]
+    del q[0:index+1]
     
-    await manager.broadcast_all({"type": "QUEUE_UPDATE", "queue": track_queue})
+    await manager.broadcast_room_queue(jam_id)
+    
+    # Update room state for the skip
+    if jam_id in manager.room_states:
+        manager.room_states[jam_id]["time"] = 0
+        manager.room_states[jam_id]["isPlaying"] = True
+
     if target_track.get("cached_url"):
-        print("cache found")
+        manager.room_states[jam_id]["track"] = target_track
         return {
             "stream_url": target_track.get("cached_url"), 
             "title": target_track.get("title"),
             "thumbnail": target_track.get('thumbnail'),
-            "queue": track_queue
+            "queue": q
         }
     else:
         ydl_opts = {
@@ -253,29 +257,35 @@ async def skip_to_track(index: int):
         }
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(target_track['url'], download=False)
+            manager.room_states[jam_id]["track"] = target_track
             return {
                 "stream_url": info.get("url"), 
                 "title": info.get("title"),
                 "thumbnail": target_track.get('thumbnail'),
-                "queue": track_queue
+                "queue": q
             }
 
 @app.get("/queue/next")
-async def next_queue():
-    if not track_queue:
+async def next_queue(jam_id: str = "global"):
+    q = manager.room_queues.get(jam_id, [])
+    if not q:
         return {"message": "Queue is empty"}
     
-    next_track = track_queue.pop(0)
+    next_track = q.pop(0)
+    await manager.broadcast_room_queue(jam_id)
+    
+    # Update room state
+    if jam_id in manager.room_states:
+        manager.room_states[jam_id]["time"] = 0
+        manager.room_states[jam_id]["isPlaying"] = True
 
-
-    await manager.broadcast_all({"type": "QUEUE_UPDATE", "queue": track_queue})
     if next_track.get("cached_url"):
-        print("cache found")
+        manager.room_states[jam_id]["track"] = next_track
         return {
             "stream_url": next_track.get("cached_url"), 
             "title": next_track.get("title"),
             "thumbnail": next_track.get('thumbnail'),
-            "queue": track_queue
+            "queue": q
         }
     else:
         ydl_opts = {
@@ -287,9 +297,10 @@ async def next_queue():
         }
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(next_track['url'], download=False)
+            manager.room_states[jam_id]["track"] = next_track
             return {
                 "stream_url": info.get("url"), 
                 "title": info.get("title"),
                 "thumbnail": next_track.get('thumbnail'),
-                "queue": track_queue
+                "queue": q
             }
