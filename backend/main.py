@@ -7,6 +7,7 @@ from typing import Optional
 import asyncio
 import json
 import os
+import time
 from dotenv import load_dotenv
 from contextlib import asynccontextmanager
 
@@ -58,7 +59,7 @@ class Jammanager:
                 pass
         if room_id not in self.rooms:
             self.rooms[room_id] = set()
-            self.room_states[room_id] = {"isPlaying": False, "time": 0, "track": None}
+            self.room_states[room_id] = {"isPlaying": False, "time": 0, "track": None, "last_updated": time.time()}
             self.room_queues[room_id] = []
         
         await ws.send_json({
@@ -113,27 +114,34 @@ async def jam_websocket(websocket: WebSocket, room_id: str, username: str):
             type = data.get("type")
             if type == "SEEK":
                 manager.room_states[room_id]["time"] = data.get("value", 0)
+                manager.room_states[room_id]["last_updated"] = time.time()
             elif type == "PLAY_PAUSE":
                 val = data.get("value")
                 is_playing = val if isinstance(val, bool) else val.get("value") if isinstance(val, dict) else False
                 manager.room_states[room_id]["isPlaying"] = is_playing
+                manager.room_states[room_id]["last_updated"] = time.time()
                 if isinstance(val, dict) and "time" in val:
                     manager.room_states[room_id]["time"] = val["time"]
             elif type == "TRACK_CHANGE":
                 manager.room_states[room_id]["track"] = data.get("track")
                 manager.room_states[room_id]["time"] = 0
                 manager.room_states[room_id]["isPlaying"] = True
+                manager.room_states[room_id]["last_updated"] = time.time()
             elif type == "RESTART":
                 manager.room_states[room_id]["time"] = 0
                 manager.room_states[room_id]["isPlaying"] = True
+                manager.room_states[room_id]["last_updated"] = time.time()
             elif type == "NEXT_TRACK":
                 pass
             elif type == "PULSE":
                 manager.room_states[room_id]["time"] = data.get("value", data.get("time", 0))
+                manager.room_states[room_id]["last_updated"] = time.time()
                 continue 
             elif type == "CHAT":
                 pass 
 
+            # Broadcast to others in the same room
+            data["last_updated"] = manager.room_states[room_id].get("last_updated")
             await manager.broadcast(room_id, data, websocket)
     except WebSocketDisconnect:
         await manager.disconnect(room_id, username, websocket)

@@ -113,20 +113,30 @@ function App() {
         isInternalChange.current = true;
         let msgState = data.state;
         if (!msgState) {
-          if (data.type === 'PLAY_PAUSE') msgState = { isPlaying: data.value };
-          if (data.type === 'SEEK') msgState = { time: data.value };
+          if (data.type === 'PLAY_PAUSE') msgState = { isPlaying: data.value, last_updated: data.last_updated || Date.now()/1000 };
+          if (data.type === 'SEEK') msgState = { time: data.value, last_updated: data.last_updated || Date.now()/1000 };
         }
         const incomingTrack = data.track || msgState?.track;
         if (data.queue) setQueue(data.queue);
 
+        // Drift calculation logic
+        const getAdjustedTime = (state) => {
+          let t = state?.time || 0;
+          if (state?.isPlaying && state?.last_updated) {
+            t += (Date.now() / 1000) - state.last_updated;
+          }
+          return t;
+        };
+
         // Case 1: Same song already loaded - apply controls, defer seek if not ready
         if (incomingTrack && currentTrack && incomingTrack.url === currentTrack.url) {
-          const timeDiff = Math.abs((videoRef.current?.currentTime || 0) - (msgState?.time || 0));
-          if (msgState?.time !== undefined && timeDiff > 2) {
+          const adjustedTime = getAdjustedTime(msgState);
+          const timeDiff = Math.abs((videoRef.current?.currentTime || 0) - adjustedTime);
+
+          if (msgState?.time !== undefined && timeDiff > 1.5) {
             if (videoRef.current?.readyState >= 2) {
-              videoRef.current.currentTime = msgState.time;
+              videoRef.current.currentTime = adjustedTime;
             } else {
-              // Video not ready yet, store for metadata load
               setPendingSync(msgState);
             }
           }
@@ -171,7 +181,21 @@ function App() {
         setPendingSync({ isPlaying: true, time: data.time || 0 });
         break;
       case 'CHAT':
-        setChatMessages(prev => [...prev, { user: data.user, text: data.text, ts: data.ts }]);
+        setChatMessages(prev => [...prev, {
+          user: data.user,
+          text: data.text,
+          isSystem: data.isSystem,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        }]);
+
+        // NEW: When someone joins, wait 3s then send a sync pulse to help them lock in
+        if (data.isSystem && data.text.includes('joined')) {
+          setTimeout(() => {
+            if (videoRef.current && !videoRef.current.paused) {
+              emitJamAction('PULSE', { time: videoRef.current.currentTime });
+            }
+          }, 3000);
+        }
         break;
       case 'SEEK':
         isInternalChange.current = true;
@@ -227,7 +251,7 @@ function App() {
     if (isPlaying && jamConnected && !isInternalChange.current) {
       const interval = setInterval(() => {
         emitJamAction('PULSE', { time: videoRef.current?.currentTime || 0 });
-      }, 10000);
+      }, 5000);
       return () => clearInterval(interval);
     }
   }, [isPlaying, jamConnected]);
@@ -238,13 +262,17 @@ function App() {
     if (pendingSync && currentTrack) {
       console.log("Applying metadata-aware sync:", pendingSync);
       isInternalChange.current = true;
+      
+      let adjustedTime = pendingSync.time || 0;
+      if (pendingSync.isPlaying && pendingSync.last_updated) {
+        adjustedTime += (Date.now() / 1000) - pendingSync.last_updated;
+      }
+
       if (pendingSync.time !== undefined) {
-        videoRef.current.currentTime = pendingSync.time;
+        videoRef.current.currentTime = adjustedTime;
       }
       if (pendingSync.isPlaying) {
         videoRef.current.play().catch(() => {
-          // Autoplay blocked - mark as paused so user can click play
-          // The seek position is already set, so clicking play will start at the right time
           setIsPlaying(false);
           console.log("Autoplay blocked - click play to join the jam");
         });
