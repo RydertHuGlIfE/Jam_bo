@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-const API_BASE = `http://${window.location.hostname}:8000`;
+const API_BASE = "";
 
 function App() {
   const [query, setQuery] = useState('')
@@ -12,7 +12,7 @@ function App() {
   const [duration, setDuration] = useState(0)
   const [currentTrack, setCurrentTrack] = useState(null)
   const [queue, setQueue] = useState([])
-  const audioRef = useRef(null)
+  const videoRef = useRef(null)
 
   // Auth State
   const [isLoggedIn, setIsLoggedIn] = useState(localStorage.getItem("jam_bo_session") === "true")
@@ -59,7 +59,17 @@ function App() {
       initJamSocket(jamId);
       return () => {
         if (wsRef.current) {
-          wsRef.current.close();
+          // Unbind handlers to prevent state updates on unmount
+          wsRef.current.onopen = null;
+          wsRef.current.onmessage = null;
+          wsRef.current.onerror = null;
+          wsRef.current.onclose = null;
+          
+          // Only close if it's already OPEN. 
+          // Closing in CONNECTING state triggers the browser's "closed before established" error.
+          if (wsRef.current.readyState === WebSocket.OPEN) {
+            wsRef.current.close();
+          }
           wsRef.current = null;
         }
       }
@@ -69,7 +79,8 @@ function App() {
   const initJamSocket = (rId) => {
     if (wsRef.current) wsRef.current.close();
 
-    const wsUrl = `ws://${window.location.hostname}:8000/ws/${rId}/${sessionUser}`;
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${window.location.host}/ws/${rId}/${sessionUser}`;
     const socket = new WebSocket(wsUrl);
     wsRef.current = socket;
 
@@ -110,18 +121,18 @@ function App() {
 
         // Case 1: Same song already loaded - apply controls, defer seek if not ready
         if (incomingTrack && currentTrack && incomingTrack.url === currentTrack.url) {
-          const timeDiff = Math.abs((audioRef.current?.currentTime || 0) - (msgState?.time || 0));
+          const timeDiff = Math.abs((videoRef.current?.currentTime || 0) - (msgState?.time || 0));
           if (msgState?.time !== undefined && timeDiff > 2) {
-            if (audioRef.current?.readyState >= 2) {
-              audioRef.current.currentTime = msgState.time;
+            if (videoRef.current?.readyState >= 2) {
+              videoRef.current.currentTime = msgState.time;
             } else {
-              // Audio not ready yet, store for metadata load
+              // Video not ready yet, store for metadata load
               setPendingSync(msgState);
             }
           }
           if (msgState?.isPlaying !== undefined) {
-            if (msgState.isPlaying) audioRef.current?.play().catch(() => setIsPlaying(false));
-            else audioRef.current?.pause();
+            if (msgState.isPlaying) videoRef.current?.play().catch(() => setIsPlaying(false));
+            else videoRef.current?.pause();
             setIsPlaying(msgState.isPlaying);
           }
           setPendingSync(null);
@@ -139,9 +150,9 @@ function App() {
         }
         // Case 4: No track info - stateless controls
         else {
-          if (msgState?.isPlaying) { audioRef.current?.play().catch(() => { }); setIsPlaying(true); }
-          else { audioRef.current?.pause(); setIsPlaying(false); }
-          if (msgState?.time !== undefined && audioRef.current) audioRef.current.currentTime = msgState.time;
+          if (msgState?.isPlaying) { videoRef.current?.play().catch(() => { }); setIsPlaying(true); }
+          else { videoRef.current?.pause(); setIsPlaying(false); }
+          if (msgState?.time !== undefined && videoRef.current) videoRef.current.currentTime = msgState.time;
         }
         break;
       }
@@ -153,7 +164,7 @@ function App() {
         break;
       case 'TRACK_CHANGE':
         isInternalChange.current = true;
-        // Set the full track with stream_url so the audio element src changes
+        // Set the full track with stream_url so the video element src changes
         setCurrentTrack(data.track);
         setCurrentTime(0);
         // pendingSync will apply play + seek when metadata is loaded
@@ -164,7 +175,7 @@ function App() {
         break;
       case 'SEEK':
         isInternalChange.current = true;
-        if (audioRef.current) audioRef.current.currentTime = data.value;
+        if (videoRef.current) videoRef.current.currentTime = data.value;
         setCurrentTime(data.value);
         break;
       case 'QUEUE_UPDATE':
@@ -177,7 +188,7 @@ function App() {
             type: 'SYNC',
             state: {
               track: currentTrack, // includes stream_url
-              time: audioRef.current?.currentTime || 0,
+              time: videoRef.current?.currentTime || 0,
               isPlaying: true
             }
           };
@@ -215,7 +226,7 @@ function App() {
   useEffect(() => {
     if (isPlaying && jamConnected && !isInternalChange.current) {
       const interval = setInterval(() => {
-        emitJamAction('PULSE', { time: audioRef.current?.currentTime || 0 });
+        emitJamAction('PULSE', { time: videoRef.current?.currentTime || 0 });
       }, 10000);
       return () => clearInterval(interval);
     }
@@ -223,15 +234,15 @@ function App() {
 
   // Handle initial sync once metadata is ready
   const handleMetadataLoaded = () => {
-    setDuration(audioRef.current.duration);
+    setDuration(videoRef.current.duration);
     if (pendingSync && currentTrack) {
       console.log("Applying metadata-aware sync:", pendingSync);
       isInternalChange.current = true;
       if (pendingSync.time !== undefined) {
-        audioRef.current.currentTime = pendingSync.time;
+        videoRef.current.currentTime = pendingSync.time;
       }
       if (pendingSync.isPlaying) {
-        audioRef.current.play().catch(() => {
+        videoRef.current.play().catch(() => {
           // Autoplay blocked - mark as paused so user can click play
           // The seek position is already set, so clicking play will start at the right time
           setIsPlaying(false);
@@ -239,7 +250,7 @@ function App() {
         });
         setIsPlaying(true);
       } else {
-        audioRef.current.pause();
+        videoRef.current.pause();
         setIsPlaying(false);
       }
       setPendingSync(null);
@@ -407,9 +418,9 @@ function App() {
   }
 
   const restartTrack = (fromRemote = false) => {
-    if (audioRef.current) {
-      audioRef.current.currentTime = 0;
-      audioRef.current.play();
+    if (videoRef.current) {
+      videoRef.current.currentTime = 0;
+      videoRef.current.play();
       setIsPlaying(true);
       if (!fromRemote) emitJamAction('RESTART', {});
     }
@@ -417,13 +428,25 @@ function App() {
 
   const handlePlayPause = (fromRemote = false) => {
     if (isPlaying) {
-      audioRef.current.pause();
+      videoRef.current.pause();
       setIsPlaying(false);
-      if (!fromRemote) emitJamAction('PLAY_PAUSE', { value: false, time: audioRef.current.currentTime });
+      if (!fromRemote) emitJamAction('PLAY_PAUSE', { value: false, time: videoRef.current.currentTime });
     } else {
-      audioRef.current.play();
+      videoRef.current.play();
       setIsPlaying(true);
-      if (!fromRemote) emitJamAction('PLAY_PAUSE', { value: true, time: audioRef.current.currentTime });
+      if (!fromRemote) emitJamAction('PLAY_PAUSE', { value: true, time: videoRef.current.currentTime });
+    }
+  };
+
+  const toggleFullscreen = () => {
+    if (videoRef.current) {
+      if (videoRef.current.requestFullscreen) {
+        videoRef.current.requestFullscreen();
+      } else if (videoRef.current.webkitRequestFullscreen) {
+        videoRef.current.webkitRequestFullscreen();
+      } else if (videoRef.current.msRequestFullscreen) {
+        videoRef.current.msRequestFullscreen();
+      }
     }
   };
 
@@ -603,16 +626,20 @@ function App() {
                 </div>
               </div>
 
-              <audio
-                ref={audioRef}
-                src={currentTrack.stream_url}
-                onTimeUpdate={() => setCurrentTime(audioRef.current.currentTime)}
-                onLoadedMetadata={handleMetadataLoaded}
-                onEnded={() => playNext(false)}
-                onPlay={() => setIsPlaying(true)}
-                onPause={() => setIsPlaying(false)}
-                autoPlay
-              />
+              <div className="video-viewport">
+                <video
+                  ref={videoRef}
+                  src={currentTrack.stream_url}
+                  className="main-video-element"
+                  onError={(e) => console.error("Video Playback Error:", e.target.error)}
+                  onTimeUpdate={() => setCurrentTime(videoRef.current.currentTime)}
+                  onLoadedMetadata={handleMetadataLoaded}
+                  onEnded={() => playNext(false)}
+                  onPlay={() => setIsPlaying(true)}
+                  onPause={() => setIsPlaying(false)}
+                  autoPlay
+                />
+              </div>
 
               <div className="controls-row">
                 <div className="main-controls">
@@ -631,6 +658,10 @@ function App() {
                   <button className="aux-control" onClick={() => playNext(false)} title="Skip Next">
                     <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M6 18l8.5-6L6 6zm9-12h2v12h-2z" /></svg>
                   </button>
+
+                  <button className="aux-control" onClick={toggleFullscreen} title="Fullscreen">
+                    <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z" /></svg>
+                  </button>
                 </div>
 
                 <div className="progress-container">
@@ -643,7 +674,7 @@ function App() {
                     value={currentTime}
                     onChange={(e) => {
                       const time = Number(e.target.value)
-                      if (audioRef.current) audioRef.current.currentTime = time
+                      if (videoRef.current) videoRef.current.currentTime = time
                       setCurrentTime(time)
                       // Always send directly — user-initiated, bypass isInternalChange guard
                       if (wsRef.current?.readyState === WebSocket.OPEN) {

@@ -8,8 +8,17 @@ import asyncio
 import json
 import os
 from dotenv import load_dotenv
+from contextlib import asynccontextmanager
 
 load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
+
+@asynccontextmanager
+async def lifespan(app:FastAPI):
+    asyncio.create_task(cacher_worker())
+    yield
+    
+
+app = FastAPI(lifespan=lifespan)
 
 try:
     auth_data = os.getenv("APP_USERS", "{}")
@@ -20,7 +29,6 @@ except Exception as e:
     print(f"--- FAILED TO LOAD USERS: {e} ---")
     user_dict = {}
 
-app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
@@ -42,7 +50,6 @@ class Jammanager:
     async def connect(self, room_id: str, username: str, ws: WebSocket):
         await ws.accept()
 
-        #if user 2 device login = kick the hell outta him 
         if username in self.user_sess:
             try:
                 await self.user_sess[username].send_json({"type": "KICKED"})
@@ -68,7 +75,6 @@ class Jammanager:
     async def disconnect(self, room_id: str, username: str, ws: WebSocket):
         if room_id in self.rooms:
             self.rooms[room_id].discard(ws)
-            # Cleanup if room is empty
             if not self.rooms[room_id]:
                 if room_id in self.rooms: del self.rooms[room_id]
                 if room_id in self.room_states: del self.room_states[room_id]
@@ -90,7 +96,11 @@ class Jammanager:
             except:
                 pass
 
+
+#class definer
 manager = Jammanager()
+
+
 
 @app.websocket("/ws/{room_id}/{username}")
 async def jam_websocket(websocket: WebSocket, room_id: str, username: str):
@@ -120,11 +130,10 @@ async def jam_websocket(websocket: WebSocket, room_id: str, username: str):
                 pass
             elif type == "PULSE":
                 manager.room_states[room_id]["time"] = data.get("value", data.get("time", 0))
-                continue # Do not broadcast pulses
+                continue 
             elif type == "CHAT":
-                pass # broadcast only no update state needed
-                
-            # Broadcast to others in the same room
+                pass 
+
             await manager.broadcast(room_id, data, websocket)
     except WebSocketDisconnect:
         await manager.disconnect(room_id, username, websocket)
@@ -158,12 +167,11 @@ async def login(request: LoginRequest):
 
 async def cacher_worker():
     while True:
-        # Scan all isolated room queues for uncached tracks
         for room_id in list(manager.room_queues.keys()):
             for track in manager.room_queues[room_id]:
                 if track.get("cached_url") is None:
                     ydl_opts = {
-                        'format': 'bestaudio/best',
+                        'format': 'best[ext=mp4]/best',
                         'quiet': True,
                         'noplaylist': True,
                         'cookiesfrombrowser': ('chromium',) ,
@@ -178,9 +186,6 @@ async def cacher_worker():
                         print(f"Error caching track in room {room_id}")
         await asyncio.sleep(1)
 
-@app.on_event("startup")
-async def startup_event():
-    asyncio.create_task(cacher_worker())
 
 @app.get("/")
 async def root():
@@ -267,7 +272,7 @@ async def skip_to_track(index: int, jam_id: str = "global"):
         }
     else:
         ydl_opts = {
-            'format': 'bestaudio/best',
+            'format': 'best[ext=mp4]/best',
             'quiet': True,
             'noplaylist': True,
             'cookiesfrombrowser': ('chromium',)  ,
@@ -317,7 +322,7 @@ async def next_queue(jam_id: str = "global"):
         }
     else:
         ydl_opts = {
-            'format': 'bestaudio/best',
+            'format': 'best[ext=mp4]/best',
             'quiet': True,
             'noplaylist': True,
             'cookiesfrombrowser': ('chromium',) ,
