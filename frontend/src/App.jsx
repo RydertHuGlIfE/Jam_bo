@@ -26,6 +26,31 @@ function App() {
   const [pendingSync, setPendingSync] = useState(null)
   const isInternalChange = useRef(false) // To prevent infinite loops on sync
 
+  // Chat state
+  const [chatMessages, setChatMessages] = useState([])
+  const [chatInput, setChatInput] = useState('')
+  const [chatOpen, setChatOpen] = useState(false)
+  const [emojiOpen, setEmojiOpen] = useState(false)
+  const chatEndRef = useRef(null)
+  const emojiPanelRef = useRef(null)
+
+  const EMOJIS = [
+    '😂','😭','💀','🔥','❤️','😍','🥹','😊','😎','🤩',
+    '🫡','🤙','👀','💯','🎵','🎶','🎤','🎧','🥳','🤯',
+    '😤','😩','🫠','😴','🤤','👻','💥','✨','🌟','💫',
+    '🍕','🍔','🍜','🧃','🧋','🫶','🤝','👑','🐐','🚀'
+  ]
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (emojiPanelRef.current && !emojiPanelRef.current.contains(e.target)) {
+        setEmojiOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
   // Fetch queue on mount
   useEffect(() => {
     if (isLoggedIn && sessionUser) {
@@ -72,7 +97,7 @@ function App() {
     console.log("Jam Inbound:", data.type, data);
     switch (data.type) {
       case 'SYNC':
-      case 'PLAY_PAUSE':
+      case 'PLAY_PAUSE': {
         isInternalChange.current = true;
         let msgState = data.state;
         if (!msgState) {
@@ -82,45 +107,43 @@ function App() {
         const incomingTrack = data.track || msgState?.track;
         if (data.queue) setQueue(data.queue);
 
-        // Case 1: Same song - Apply controls immediately
+        // Case 1: Same song already loaded - apply controls, defer seek if not ready
         if (incomingTrack && currentTrack && incomingTrack.url === currentTrack.url) {
-          if (msgState.isPlaying !== undefined) {
-             if (msgState.isPlaying) audioRef.current?.play().catch(() => {});
-             else audioRef.current?.pause();
-             setIsPlaying(msgState.isPlaying);
+          const timeDiff = Math.abs((audioRef.current?.currentTime || 0) - (msgState?.time || 0));
+          if (msgState?.time !== undefined && timeDiff > 2) {
+            if (audioRef.current?.readyState >= 2) {
+              audioRef.current.currentTime = msgState.time;
+            } else {
+              // Audio not ready yet, store for metadata load
+              setPendingSync(msgState);
+            }
           }
-          if (msgState.time !== undefined && Math.abs(audioRef.current?.currentTime - msgState.time) > 2) {
-             audioRef.current.currentTime = msgState.time;
+          if (msgState?.isPlaying !== undefined) {
+            if (msgState.isPlaying) audioRef.current?.play().catch(() => setIsPlaying(false));
+            else audioRef.current?.pause();
+            setIsPlaying(msgState.isPlaying);
           }
-          setPendingSync(null); // Clear any pending
-        } 
-        // Case 2: New song - Queue for metadata load
+          setPendingSync(null);
+        }
+        // Case 2: New song - set track and wait for metadata to apply sync
         else if (incomingTrack) {
           setCurrentTrack(incomingTrack);
           setPendingSync(msgState);
-        } 
-        // Case 3: Host Claim - If we have a track but room is empty, introduce ourselves
-        // We use a direct socket send to bypass the isInternalChange guard
+        }
+        // Case 3: Host Claim - introduce ourselves
         else if (currentTrack) {
           console.log("Empty room joined, claiming with local track:", currentTrack.title);
           const payload = { type: 'TRACK_CHANGE', track: currentTrack };
           wsRef.current?.send(JSON.stringify(payload));
         }
-        // Case 4: No track info - Apply state to whatever is there
+        // Case 4: No track info - stateless controls
         else {
-          const shouldPlay = msgState.isPlaying;
-          if (shouldPlay) {
-            audioRef.current?.play().catch(() => {});
-            setIsPlaying(true);
-          } else {
-            audioRef.current?.pause();
-            setIsPlaying(false);
-          }
-          if (msgState.time !== undefined && audioRef.current) {
-            audioRef.current.currentTime = msgState.time;
-          }
+          if (msgState?.isPlaying) { audioRef.current?.play().catch(() => {}); setIsPlaying(true); }
+          else { audioRef.current?.pause(); setIsPlaying(false); }
+          if (msgState?.time !== undefined && audioRef.current) audioRef.current.currentTime = msgState.time;
         }
         break;
+      }
       case 'RESTART':
         restartTrack(true);
         break;
@@ -129,9 +152,14 @@ function App() {
         break;
       case 'TRACK_CHANGE':
         isInternalChange.current = true;
+        // Set the full track with stream_url so the audio element src changes
         setCurrentTrack(data.track);
-        setIsPlaying(true);
         setCurrentTime(0);
+        // pendingSync will apply play + seek when metadata is loaded
+        setPendingSync({ isPlaying: true, time: data.time || 0 });
+        break;
+      case 'CHAT':
+        setChatMessages(prev => [...prev, { user: data.user, text: data.text, ts: data.ts }]);
         break;
       case 'SEEK':
         isInternalChange.current = true;
@@ -143,8 +171,15 @@ function App() {
         break;
       case 'PING':
         if (isPlaying && currentTrack) {
-          // Send current state directly to bypass isInternalChange guard
-          const payload = { type: 'SYNC', state: { track: currentTrack, time: audioRef.current?.currentTime || 0, isPlaying: true } };
+          // Respond with full track state so joiner can actually play the song
+          const payload = {
+            type: 'SYNC',
+            state: {
+              track: currentTrack, // includes stream_url
+              time: audioRef.current?.currentTime || 0,
+              isPlaying: true
+            }
+          };
           wsRef.current?.send(JSON.stringify(payload));
         }
         break;
@@ -154,10 +189,24 @@ function App() {
         break;
     }
     // Guaranteed reset after state updates settle
-    setTimeout(() => { 
+    setTimeout(() => {
       isInternalChange.current = false;
-    }, 200);
+    }, 300);
   };
+
+  const sendChat = (e) => {
+    e.preventDefault();
+    const text = chatInput.trim();
+    if (!text || !wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+    const msg = { type: 'CHAT', user: sessionUser, text, ts: Date.now() };
+    wsRef.current.send(JSON.stringify(msg));
+    setChatMessages(prev => [...prev, { user: sessionUser, text, ts: msg.ts }]);
+    setChatInput('');
+  };
+
+  useEffect(() => {
+    if (chatOpen) chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [chatMessages, chatOpen]);
 
   const getRoomId = () => jamId || `solo_${sessionUser}`;
 
@@ -181,13 +230,18 @@ function App() {
             audioRef.current.currentTime = pendingSync.time;
         }
         if (pendingSync.isPlaying) {
-            audioRef.current.play().catch(e => console.log("Autoplay blocked"));
+            audioRef.current.play().catch(() => {
+              // Autoplay blocked - mark as paused so user can click play
+              // The seek position is already set, so clicking play will start at the right time
+              setIsPlaying(false);
+              console.log("Autoplay blocked - click play to join the jam");
+            });
             setIsPlaying(true);
         } else {
             audioRef.current.pause();
             setIsPlaying(false);
         }
-        setPendingSync(null); 
+        setPendingSync(null);
     }
   };
 
@@ -467,6 +521,59 @@ function App() {
             )}
           </div>
         </div>
+
+        {/* Chat Panel - only show in active jam */}
+        {jamId !== 'global' && (
+          <div className="chat-panel">
+            <button className="chat-toggle" onClick={() => setChatOpen(o => !o)}>
+              💬 {chatOpen ? 'Hide Chat' : 'Jam Chat'}
+              {!chatOpen && chatMessages.length > 0 && <span className="chat-badge">{chatMessages.length}</span>}
+            </button>
+            {chatOpen && (
+              <div className="chat-body">
+                <div className="chat-messages">
+                  {chatMessages.length === 0 && <div className="chat-empty">No messages yet. Say hi! 👋</div>}
+                  {chatMessages.map((m, i) => (
+                    <div key={i} className={`chat-msg ${m.user === sessionUser ? 'chat-msg-self' : ''}`}>
+                      <span className="chat-user">{m.user}: </span>
+                      <span className="chat-text">{m.text}</span>
+                    </div>
+                  ))}
+                  <div ref={chatEndRef} />
+                </div>
+                <div className="chat-input-area" ref={emojiPanelRef}>
+                  {emojiOpen && (
+                    <div className="emoji-panel">
+                      {EMOJIS.map((emoji, i) => (
+                        <button
+                          key={i}
+                          className="emoji-btn"
+                          type="button"
+                          onClick={() => setChatInput(prev => prev + emoji)}
+                        >{emoji}</button>
+                      ))}
+                    </div>
+                  )}
+                  <form className="chat-form" onSubmit={sendChat}>
+                    <button
+                      type="button"
+                      className="emoji-toggle-btn"
+                      onClick={() => setEmojiOpen(o => !o)}
+                    >😊</button>
+                    <input
+                      type="text"
+                      className="chat-input-field"
+                      placeholder="Say something..."
+                      value={chatInput}
+                      onChange={e => setChatInput(e.target.value)}
+                    />
+                    <button type="submit" className="chat-send-btn">→</button>
+                  </form>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </aside>
 
       {/* Main Content Area */}
@@ -535,9 +642,12 @@ function App() {
                     value={currentTime}
                     onChange={(e) => {
                       const time = Number(e.target.value)
-                      audioRef.current.currentTime = time
+                      if (audioRef.current) audioRef.current.currentTime = time
                       setCurrentTime(time)
-                      emitJamAction('SEEK', time)
+                      // Always send directly — user-initiated, bypass isInternalChange guard
+                      if (wsRef.current?.readyState === WebSocket.OPEN) {
+                        wsRef.current.send(JSON.stringify({ type: 'SEEK', value: time }))
+                      }
                     }}
                   />
                   <span className="time-display">{formatTime(duration)}</span>

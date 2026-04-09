@@ -121,6 +121,8 @@ async def jam_websocket(websocket: WebSocket, room_id: str, username: str):
             elif type == "PULSE":
                 manager.room_states[room_id]["time"] = data.get("value", data.get("time", 0))
                 continue # Do not broadcast pulses
+            elif type == "CHAT":
+                pass # broadcast only no update state needed
                 
             # Broadcast to others in the same room
             await manager.broadcast(room_id, data, websocket)
@@ -156,22 +158,24 @@ async def login(request: LoginRequest):
 
 async def cacher_worker():
     while True:
-        for track in track_queue:
-            if track.get("cached_url") is None:
-                ydl_opts = {
-                    'format': 'bestaudio/best',
-                    'quiet': True,
-                    'noplaylist': True,
-                    'cookiesfrombrowser': ('chromium',) ,
-                    'no_warnings': True
-                }
-                try:          
-                    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                        info = await asyncio.to_thread(ydl.extract_info, track['url'], download=False)
-                        track["cached_url"] = info.get("url")
-                        print(f"caching: {track['title']} complete")
-                except Exception as e:
-                    print("Error caching")
+        # Scan all isolated room queues for uncached tracks
+        for room_id in list(manager.room_queues.keys()):
+            for track in manager.room_queues[room_id]:
+                if track.get("cached_url") is None:
+                    ydl_opts = {
+                        'format': 'bestaudio/best',
+                        'quiet': True,
+                        'noplaylist': True,
+                        'cookiesfrombrowser': ('chromium',) ,
+                        'no_warnings': True
+                    }
+                    try:          
+                        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                            info = await asyncio.to_thread(ydl.extract_info, track['url'], download=False)
+                            track["cached_url"] = info.get("url")
+                            print(f"caching: {track['title']} complete (Room: {room_id})")
+                    except Exception as e:
+                        print(f"Error caching track in room {room_id}")
         await asyncio.sleep(1)
 
 @app.on_event("startup")
@@ -187,11 +191,19 @@ async def health_check():
     return {"status": "ok"}
 
 
+class Track(BaseModel):
+    url: str
+    title: str
+    thumbnail: str
+    cached_url: Optional[str] = None
+
 @app.get("/search")
 async def ytsearch(query: str):
-    with yt_dlp.YoutubeDL({'quiet': True, 'extract_flat': True}) as ydl:
-        data = ydl.extract_info(f"ytsearch10:{query}", download=False)
-        return data
+    def _search():
+        with yt_dlp.YoutubeDL({'quiet': True, 'extract_flat': True}) as ydl:
+            return ydl.extract_info(f"ytsearch10:{query}", download=False)
+    data = await asyncio.to_thread(_search)
+    return data
 
 @app.post("/queue/add")
 async def add_queue(track: Track, top: bool = Query(False), jam_id: str = "global"):
@@ -225,7 +237,12 @@ async def delete_track(index: int, jam_id: str = "global"):
 
 @app.get("/queue/skip")
 async def skip_to_track(index: int, jam_id: str = "global"):
-    q = manager.room_queues.get(jam_id, [])
+    if jam_id not in manager.room_queues:
+        manager.room_queues[jam_id] = []
+    if jam_id not in manager.room_states:
+        manager.room_states[jam_id] = {"isPlaying": False, "time": 0, "track": None}
+        
+    q = manager.room_queues[jam_id]
     if not q or index >= len(q):
         return {"message": "Invalid index or empty queue"}
     target_track = q[index]
@@ -234,15 +251,16 @@ async def skip_to_track(index: int, jam_id: str = "global"):
     
     await manager.broadcast_room_queue(jam_id)
     
-    # Update room state for the skip
-    if jam_id in manager.room_states:
-        manager.room_states[jam_id]["time"] = 0
-        manager.room_states[jam_id]["isPlaying"] = True
+    manager.room_states[jam_id]["time"] = 0
+    manager.room_states[jam_id]["isPlaying"] = True
 
     if target_track.get("cached_url"):
-        manager.room_states[jam_id]["track"] = target_track
+        stream_url = target_track.get("cached_url")
+        manager.room_states[jam_id]["track"] = {**target_track, "stream_url": stream_url}
+        # Broadcast with stream_url so all clients can play
+        await manager.broadcast(jam_id, {"type": "TRACK_CHANGE", "track": {**target_track, "stream_url": stream_url}}, None)
         return {
-            "stream_url": target_track.get("cached_url"), 
+            "stream_url": stream_url, 
             "title": target_track.get("title"),
             "thumbnail": target_track.get('thumbnail'),
             "queue": q
@@ -255,19 +273,28 @@ async def skip_to_track(index: int, jam_id: str = "global"):
             'cookiesfrombrowser': ('chromium',)  ,
             'no_warnings': True
         }
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(target_track['url'], download=False)
-            manager.room_states[jam_id]["track"] = target_track
-            return {
-                "stream_url": info.get("url"), 
-                "title": info.get("title"),
-                "thumbnail": target_track.get('thumbnail'),
-                "queue": q
-            }
+        def _fetch_skip():
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                return ydl.extract_info(target_track['url'], download=False)
+        info = await asyncio.to_thread(_fetch_skip)
+        stream_url = info.get("url")
+        manager.room_states[jam_id]["track"] = {**target_track, "stream_url": stream_url}
+        await manager.broadcast(jam_id, {"type": "TRACK_CHANGE", "track": {**target_track, "stream_url": stream_url}}, None)
+        return {
+            "stream_url": stream_url, 
+            "title": info.get("title"),
+            "thumbnail": target_track.get('thumbnail'),
+            "queue": q
+        }
 
 @app.get("/queue/next")
 async def next_queue(jam_id: str = "global"):
-    q = manager.room_queues.get(jam_id, [])
+    if jam_id not in manager.room_queues:
+        manager.room_queues[jam_id] = []
+    if jam_id not in manager.room_states:
+        manager.room_states[jam_id] = {"isPlaying": False, "time": 0, "track": None}
+        
+    q = manager.room_queues[jam_id]
     if not q:
         return {"message": "Queue is empty"}
     
@@ -275,14 +302,15 @@ async def next_queue(jam_id: str = "global"):
     await manager.broadcast_room_queue(jam_id)
     
     # Update room state
-    if jam_id in manager.room_states:
-        manager.room_states[jam_id]["time"] = 0
-        manager.room_states[jam_id]["isPlaying"] = True
+    manager.room_states[jam_id]["time"] = 0
+    manager.room_states[jam_id]["isPlaying"] = True
 
     if next_track.get("cached_url"):
-        manager.room_states[jam_id]["track"] = next_track
+        stream_url = next_track.get("cached_url")
+        manager.room_states[jam_id]["track"] = {**next_track, "stream_url": stream_url}
+        await manager.broadcast(jam_id, {"type": "TRACK_CHANGE", "track": {**next_track, "stream_url": stream_url}}, None)
         return {
-            "stream_url": next_track.get("cached_url"), 
+            "stream_url": stream_url, 
             "title": next_track.get("title"),
             "thumbnail": next_track.get('thumbnail'),
             "queue": q
@@ -295,12 +323,16 @@ async def next_queue(jam_id: str = "global"):
             'cookiesfrombrowser': ('chromium',) ,
             'no_warnings': True
         }
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(next_track['url'], download=False)
-            manager.room_states[jam_id]["track"] = next_track
-            return {
-                "stream_url": info.get("url"), 
-                "title": info.get("title"),
-                "thumbnail": next_track.get('thumbnail'),
-                "queue": q
-            }
+        def _fetch_next():
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                return ydl.extract_info(next_track['url'], download=False)
+        info = await asyncio.to_thread(_fetch_next)
+        stream_url = info.get("url")
+        manager.room_states[jam_id]["track"] = {**next_track, "stream_url": stream_url}
+        await manager.broadcast(jam_id, {"type": "TRACK_CHANGE", "track": {**next_track, "stream_url": stream_url}}, None)
+        return {
+            "stream_url": stream_url, 
+            "title": info.get("title"),
+            "thumbnail": next_track.get('thumbnail'),
+            "queue": q
+        }
