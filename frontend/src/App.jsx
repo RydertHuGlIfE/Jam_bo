@@ -35,10 +35,11 @@ function App() {
   const emojiPanelRef = useRef(null)
 
   const EMOJIS = [
-    '😂','😭','💀','🔥','❤️','😍','🥹','😊','😎','🤩',
-    '🫡','🤙','👀','💯','🎵','🎶','🎤','🎧','🥳','🤯',
-    '😤','😩','🫠','😴','🤤','👻','💥','✨','🌟','💫',
-    '🍕','🍔','🍜','🧃','🧋','🫶','🤝','👑','🐐','🚀'
+    '😅', '😶', '🥲', '😑', '🙂', '🙃', '😁', '😺',
+    '😂', '😭', '💀', '🔥', '❤️', '😍', '🥹', '😊', '😎', '🤩',
+    '🫡', '🤙', '👀', '💯', '🎵', '🎶', '🎤', '🎧', '🥳', '🤯',
+    '😤', '😩', '🫠', '😴', '🤤', '👻', '💥', '✨', '🌟', '💫',
+    '🍕', '🍔', '🍜', '🧃', '🧋', '🫶', '🤝', '👑', '🐐', '🚀'
   ]
 
   useEffect(() => {
@@ -67,7 +68,7 @@ function App() {
 
   const initJamSocket = (rId) => {
     if (wsRef.current) wsRef.current.close();
-    
+
     const wsUrl = `ws://${window.location.hostname}:8000/ws/${rId}/${sessionUser}`;
     const socket = new WebSocket(wsUrl);
     wsRef.current = socket;
@@ -138,7 +139,7 @@ function App() {
         }
         // Case 4: No track info - stateless controls
         else {
-          if (msgState?.isPlaying) { audioRef.current?.play().catch(() => {}); setIsPlaying(true); }
+          if (msgState?.isPlaying) { audioRef.current?.play().catch(() => { }); setIsPlaying(true); }
           else { audioRef.current?.pause(); setIsPlaying(false); }
           if (msgState?.time !== undefined && audioRef.current) audioRef.current.currentTime = msgState.time;
         }
@@ -224,24 +225,24 @@ function App() {
   const handleMetadataLoaded = () => {
     setDuration(audioRef.current.duration);
     if (pendingSync && currentTrack) {
-        console.log("Applying metadata-aware sync:", pendingSync);
-        isInternalChange.current = true;
-        if (pendingSync.time !== undefined) {
-            audioRef.current.currentTime = pendingSync.time;
-        }
-        if (pendingSync.isPlaying) {
-            audioRef.current.play().catch(() => {
-              // Autoplay blocked - mark as paused so user can click play
-              // The seek position is already set, so clicking play will start at the right time
-              setIsPlaying(false);
-              console.log("Autoplay blocked - click play to join the jam");
-            });
-            setIsPlaying(true);
-        } else {
-            audioRef.current.pause();
-            setIsPlaying(false);
-        }
-        setPendingSync(null);
+      console.log("Applying metadata-aware sync:", pendingSync);
+      isInternalChange.current = true;
+      if (pendingSync.time !== undefined) {
+        audioRef.current.currentTime = pendingSync.time;
+      }
+      if (pendingSync.isPlaying) {
+        audioRef.current.play().catch(() => {
+          // Autoplay blocked - mark as paused so user can click play
+          // The seek position is already set, so clicking play will start at the right time
+          setIsPlaying(false);
+          console.log("Autoplay blocked - click play to join the jam");
+        });
+        setIsPlaying(true);
+      } else {
+        audioRef.current.pause();
+        setIsPlaying(false);
+      }
+      setPendingSync(null);
     }
   };
 
@@ -261,9 +262,9 @@ function App() {
   const emitJamAction = (type, value) => {
     if (isInternalChange.current) return;
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      const payload = (typeof value === 'object' && value !== null) 
-          ? { type, ...value } 
-          : { type, value };
+      const payload = (typeof value === 'object' && value !== null)
+        ? { type, ...value }
+        : { type, value };
       console.log("Jam Outbound:", type, payload);
       wsRef.current.send(JSON.stringify(payload));
     }
@@ -356,7 +357,7 @@ function App() {
     try {
       const response = await fetch(`${API_BASE}/queue/next?jam_id=${getRoomId()}`)
       const data = await response.json()
-      
+
       if (data.stream_url) {
         setCurrentTrack(data)
         setIsPlaying(true)
