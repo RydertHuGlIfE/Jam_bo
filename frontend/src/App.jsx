@@ -64,7 +64,7 @@ function App() {
           wsRef.current.onmessage = null;
           wsRef.current.onerror = null;
           wsRef.current.onclose = null;
-          
+
           // Only close if it's already OPEN. 
           // Closing in CONNECTING state triggers the browser's "closed before established" error.
           if (wsRef.current.readyState === WebSocket.OPEN) {
@@ -113,8 +113,17 @@ function App() {
         isInternalChange.current = true;
         let msgState = data.state;
         if (!msgState) {
-          if (data.type === 'PLAY_PAUSE') msgState = { isPlaying: data.value, last_updated: data.last_updated || Date.now()/1000 };
-          if (data.type === 'SEEK') msgState = { time: data.value, last_updated: data.last_updated || Date.now()/1000 };
+          if (data.type === 'PLAY_PAUSE') msgState = { isPlaying: data.value, last_updated: data.last_updated || Date.now() / 1000 };
+          if (data.type === 'SEEK') msgState = { time: data.value, last_updated: data.last_updated || Date.now() / 1000 };
+          if (data.type === 'SONG_PULSE') {
+            const drift = (Date.now() / 1000) - data.last_updated;
+            const authtime = data.time + drift;
+            const diff = Math.abs(videoRef.current?.currentTime - authtime);
+            if (diff > 0.5) {
+              videoRef.current.currentTime = authtime;
+
+            }
+          }
         }
         const incomingTrack = data.track || msgState?.track;
         if (data.queue) setQueue(data.queue);
@@ -262,7 +271,7 @@ function App() {
     if (pendingSync && currentTrack) {
       console.log("Applying metadata-aware sync:", pendingSync);
       isInternalChange.current = true;
-      
+
       let adjustedTime = pendingSync.time || 0;
       if (pendingSync.isPlaying && pendingSync.last_updated) {
         adjustedTime += (Date.now() / 1000) - pendingSync.last_updated;

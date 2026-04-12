@@ -140,6 +140,7 @@ async def jam_websocket(websocket: WebSocket, room_id: str, username: str):
             elif type == "CHAT":
                 pass 
 
+
             # Broadcast to others in the same room
             data["last_updated"] = manager.room_states[room_id].get("last_updated")
             await manager.broadcast(room_id, data, websocket)
