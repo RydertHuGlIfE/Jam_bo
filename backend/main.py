@@ -137,6 +137,10 @@ async def jam_websocket(websocket: WebSocket, room_id: str, username: str):
                 manager.room_states[room_id]["time"] = data.get("value", data.get("time", 0))
                 manager.room_states[room_id]["last_updated"] = time.time()
                 continue 
+            elif type=="SONG_PULSE":
+                manager.room_states[room_id]["time"] = data.get("value", data.get("time", 0))
+                manager.room_states[room_id]["last_updated"] = time.time()
+                
             elif type == "CHAT":
                 pass 
 
@@ -180,7 +184,7 @@ async def cacher_worker():
             for track in manager.room_queues[room_id]:
                 if track.get("cached_url") is None:
                     ydl_opts = {
-                        'format': 'best[ext=mp4]/best',
+                        'format': '18/best[height<=360][ext=mp4]/best',
                         'quiet': True,
                         'noplaylist': True,
                         'cookiesfrombrowser': ('chromium',) ,
@@ -281,7 +285,7 @@ async def skip_to_track(index: int, jam_id: str = "global"):
         }
     else:
         ydl_opts = {
-            'format': 'best[ext=mp4]/best',
+            'format': '18/best[height<=360][ext=mp4]/best',
             'quiet': True,
             'noplaylist': True,
             'cookiesfrombrowser': ('chromium',)  ,
@@ -331,7 +335,7 @@ async def next_queue(jam_id: str = "global"):
         }
     else:
         ydl_opts = {
-            'format': 'best[ext=mp4]/best',
+            'format': '18/best[height<=360][ext=mp4]/best',
             'quiet': True,
             'noplaylist': True,
             'cookiesfrombrowser': ('chromium',) ,

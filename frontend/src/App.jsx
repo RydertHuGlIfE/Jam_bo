@@ -115,15 +115,6 @@ function App() {
         if (!msgState) {
           if (data.type === 'PLAY_PAUSE') msgState = { isPlaying: data.value, last_updated: data.last_updated || Date.now() / 1000 };
           if (data.type === 'SEEK') msgState = { time: data.value, last_updated: data.last_updated || Date.now() / 1000 };
-          if (data.type === 'SONG_PULSE') {
-            const drift = (Date.now() / 1000) - data.last_updated;
-            const authtime = data.time + drift;
-            const diff = Math.abs(videoRef.current?.currentTime - authtime);
-            if (diff > 0.5) {
-              videoRef.current.currentTime = authtime;
-
-            }
-          }
         }
         const incomingTrack = data.track || msgState?.track;
         if (data.queue) setQueue(data.queue);
@@ -259,8 +250,9 @@ function App() {
   useEffect(() => {
     if (isPlaying && jamConnected && !isInternalChange.current) {
       const interval = setInterval(() => {
-        emitJamAction('PULSE', { time: videoRef.current?.currentTime || 0 });
-      }, 5000);
+        // High-frequency SONG_PULSE every 1 second
+        emitJamAction('SONG_PULSE', { value: videoRef.current?.currentTime || 0 });
+      }, 1000);
       return () => clearInterval(interval);
     }
   }, [isPlaying, jamConnected]);
