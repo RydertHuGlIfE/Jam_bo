@@ -52,9 +52,13 @@ class Jammanager:
 
 
     async def jam_beat(self, room_id):
-        while room_id in self.rooms:   #only when jam=on
+        while True:   #only when jam=on
             await asyncio.sleep(1)
-            state = self.room_states[room_id]
+            state = self.room_states.get(room_id)
+
+            if not state:
+                break
+            
             if state["isPlaying"]:
                 state["time"] +=1
                 state["last_updated"] = time.time()

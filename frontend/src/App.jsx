@@ -108,6 +108,21 @@ function App() {
   const handleJamMessage = (data) => {
     console.log("Jam Inbound:", data.type, data);
     switch (data.type) {
+      case 'PULSE': {
+        if (!videoRef.current || isInternalChange.current || loading) return;
+
+        // Calculate drift from server-side timestamp
+        const drift = (Date.now() / 1000) - data.last_updated;
+        const authoritativeTime = data.value + drift;
+
+        const diff = Math.abs(videoRef.current.currentTime - authoritativeTime);
+        // Soft sync threshold: only jump if drift > 1.2s to keep it smooth
+        if (diff > 1.2 && videoRef.current.readyState >= 2) {
+          isInternalChange.current = true;
+          videoRef.current.currentTime = authoritativeTime;
+        }
+        break;
+      }
       case 'SYNC':
       case 'PLAY_PAUSE': {
         isInternalChange.current = true;
@@ -128,7 +143,6 @@ function App() {
           return t;
         };
 
-        // Case 1: Same song already loaded - apply controls, defer seek if not ready
         if (incomingTrack && currentTrack && incomingTrack.url === currentTrack.url) {
           const adjustedTime = getAdjustedTime(msgState);
           const timeDiff = Math.abs((videoRef.current?.currentTime || 0) - adjustedTime);
@@ -246,13 +260,12 @@ function App() {
 
   const getRoomId = () => jamId || `solo_${sessionUser}`;
 
-  // Heartbeat to keep server state fresh for new joiners
+  // Keep-alive heartbeat (Server now handles sync pulses every 1s)
   useEffect(() => {
     if (isPlaying && jamConnected && !isInternalChange.current) {
       const interval = setInterval(() => {
-        // High-frequency SONG_PULSE every 1 second
-        emitJamAction('SONG_PULSE', { value: videoRef.current?.currentTime || 0 });
-      }, 1000);
+        emitJamAction('KEEPALIVE_PULSE', { time: videoRef.current?.currentTime || 0 });
+      }, 10000);
       return () => clearInterval(interval);
     }
   }, [isPlaying, jamConnected]);
