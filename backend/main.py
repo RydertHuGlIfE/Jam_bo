@@ -39,6 +39,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+
 class Jammanager:
     def __init__(self): 
         self.rooms: dict[str, set[WebSocket]] = {}
@@ -47,6 +49,16 @@ class Jammanager:
         self.room_states: dict[str, dict] = {}
         # room_id -> list of tracks
         self.room_queues: dict[str, list] = {}
+
+
+    async def jam_beat(self, room_id):
+        while room_id in self.rooms:   #only when jam=on
+            await asyncio.sleep(1)
+            state = self.room_states[room_id]
+            if state["isPlaying"]:
+                state["time"] +=1
+                state["last_updated"] = time.time()
+                await self.broadcast(room_id, {"type": "PULSE", "value": state["time"]}, None)
 
     async def connect(self, room_id: str, username: str, ws: WebSocket):
         await ws.accept()
@@ -61,7 +73,8 @@ class Jammanager:
             self.rooms[room_id] = set()
             self.room_states[room_id] = {"isPlaying": False, "time": 0, "track": None, "last_updated": time.time()}
             self.room_queues[room_id] = []
-        
+            asyncio.create_task(self.jam_beat(room_id))   #bgpro
+
         await ws.send_json({
             "type": "SYNC", 
             "state": self.room_states[room_id],
@@ -140,7 +153,6 @@ async def jam_websocket(websocket: WebSocket, room_id: str, username: str):
             elif type=="SONG_PULSE":
                 manager.room_states[room_id]["time"] = data.get("value", data.get("time", 0))
                 manager.room_states[room_id]["last_updated"] = time.time()
-                
             elif type == "CHAT":
                 pass 
 
