@@ -62,7 +62,7 @@ class Jammanager:
             if state["isPlaying"]:
                 state["time"] +=1
                 state["last_updated"] = time.time()
-                await self.broadcast(room_id, {"type": "PULSE", "value": state["time"]}, None)
+                await self.broadcast(room_id, {"type": "PULSE", "value": state["time"], "last_updated": state["last_updated"]}, None)
 
     async def connect(self, room_id: str, username: str, ws: WebSocket):
         await ws.accept()
