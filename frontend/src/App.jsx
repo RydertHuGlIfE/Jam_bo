@@ -25,6 +25,7 @@ function App() {
   const [jamId, setJamId] = useState(new URLSearchParams(window.location.search).get('jam') || 'global')
   const [pendingSync, setPendingSync] = useState(null)
   const isInternalChange = useRef(false) // To prevent infinite loops on sync
+  const lastSyncRef = useRef(0)
 
   // Chat state
   const [chatMessages, setChatMessages] = useState([])
@@ -111,6 +112,9 @@ function App() {
       case 'PULSE': {
         if (!videoRef.current || isInternalChange.current) return;
 
+        // Anti-stutter: Don't jump more than once every 2 seconds
+        if (Date.now() - lastSyncRef.current < 2000) return;
+
         // Calculate drift from server-side timestamp
         const drift = (Date.now() / 1000) - data.last_updated;
         const authoritativeTime = data.value + drift;
@@ -125,6 +129,7 @@ function App() {
         // Soft sync threshold: only jump if drift > 1.2s to keep it smooth
         if (diff > 1.2 && videoRef.current.readyState >= 2) {
           isInternalChange.current = true;
+          lastSyncRef.current = Date.now();
           videoRef.current.currentTime = authoritativeTime;
         }
         break;
