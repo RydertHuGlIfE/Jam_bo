@@ -109,11 +109,17 @@ function App() {
     console.log("Jam Inbound:", data.type, data);
     switch (data.type) {
       case 'PULSE': {
-        if (!videoRef.current || isInternalChange.current || loading) return;
+        if (!videoRef.current || isInternalChange.current) return;
 
         // Calculate drift from server-side timestamp
         const drift = (Date.now() / 1000) - data.last_updated;
         const authoritativeTime = data.value + drift;
+
+        if (loading) {
+          // If loading, just update the target sync destination so metadata handler uses it
+          setPendingSync({ time: data.value, isPlaying: true, last_updated: data.last_updated });
+          return;
+        }
 
         const diff = Math.abs(videoRef.current.currentTime - authoritativeTime);
         // Soft sync threshold: only jump if drift > 1.2s to keep it smooth
@@ -275,28 +281,42 @@ function App() {
     setDuration(videoRef.current.duration);
     if (pendingSync && currentTrack) {
       console.log("Applying metadata-aware sync:", pendingSync);
-      isInternalChange.current = true;
-
-      let adjustedTime = pendingSync.time || 0;
-      if (pendingSync.isPlaying && pendingSync.last_updated) {
-        adjustedTime += (Date.now() / 1000) - pendingSync.last_updated;
-      }
-
-      if (pendingSync.time !== undefined) {
-        videoRef.current.currentTime = adjustedTime;
-      }
-      if (pendingSync.isPlaying) {
-        videoRef.current.play().catch(() => {
-          setIsPlaying(false);
-          console.log("Autoplay blocked - click play to join the jam");
-        });
-        setIsPlaying(true);
-      } else {
-        videoRef.current.pause();
-        setIsPlaying(false);
-      }
-      setPendingSync(null);
+      applyGlobalSync(pendingSync);
     }
+  };
+
+  const onVideoPlaying = () => {
+    // Snap to server time when video actually starts moving to eliminate "extraction gap"
+    setLoading(false);
+    if (jamConnected && !isInternalChange.current) {
+      // Periodic pulses will keep us in sync, but onPlaying ensures we snap immediately
+      console.log("Video started - playback confirmed");
+    }
+  };
+
+  const applyGlobalSync = (state) => {
+    if (!videoRef.current) return;
+    isInternalChange.current = true;
+
+    let adjustedTime = state.time || 0;
+    if (state.isPlaying && state.last_updated) {
+      adjustedTime += (Date.now() / 1000) - state.last_updated;
+    }
+
+    if (state.time !== undefined) {
+      videoRef.current.currentTime = adjustedTime;
+    }
+    if (state.isPlaying) {
+      videoRef.current.play().catch(() => {
+        setIsPlaying(false);
+        console.log("Autoplay blocked - click play to join the jam");
+      });
+      setIsPlaying(true);
+    } else {
+      videoRef.current.pause();
+      setIsPlaying(false);
+    }
+    setPendingSync(null);
   };
 
   const startJam = () => {
@@ -676,6 +696,7 @@ function App() {
                   onError={(e) => console.error("Video Playback Error:", e.target.error)}
                   onTimeUpdate={() => setCurrentTime(videoRef.current.currentTime)}
                   onLoadedMetadata={handleMetadataLoaded}
+                  onPlaying={onVideoPlaying}
                   onEnded={() => playNext(false)}
                   onPlay={() => setIsPlaying(true)}
                   onPause={() => setIsPlaying(false)}

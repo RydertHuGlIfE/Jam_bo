@@ -313,7 +313,7 @@ async def skip_to_track(index: int, jam_id: str = "global"):
         info = await asyncio.to_thread(_fetch_skip)
         stream_url = info.get("url")
         manager.room_states[jam_id]["track"] = {**target_track, "stream_url": stream_url}
-        await manager.broadcast(jam_id, {"type": "TRACK_CHANGE", "track": {**target_track, "stream_url": stream_url}}, None)
+        await manager.broadcast(jam_id, {"type": "TRACK_CHANGE", "track": {**target_track, "stream_url": stream_url}, "time": 0}, None)
         return {
             "stream_url": stream_url, 
             "title": info.get("title"),
