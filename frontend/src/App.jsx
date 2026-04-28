@@ -151,7 +151,7 @@ function App() {
         isInternalChange.current = true;
         let msgState = data.state;
         if (!msgState) {
-          if (data.type === 'PLAY_PAUSE') msgState = { isPlaying: data.value, last_updated: data.last_updated || Date.now() / 1000 };
+          if (data.type === 'PLAY_PAUSE') msgState = { isPlaying: data.value, time: data.time, last_updated: data.last_updated || Date.now() / 1000 };
           if (data.type === 'SEEK') msgState = { time: data.value, last_updated: data.last_updated || Date.now() / 1000 };
         }
         const incomingTrack = data.track || msgState?.track;
@@ -586,7 +586,7 @@ function App() {
             <span className={jamConnected ? "jam-active" : ""}>
               {jamConnected ? "● " : ""}{sessionUser}
             </span>
-            {jamId === 'global' ? (
+            {jamId === 'global' || jamId.startsWith('local_') ? (
               <button className="btn-jam-start" onClick={startJam}>Start Jam</button>
             ) : (
               <button className="btn-jam-copy" onClick={copyInvite}>Copy Invite</button>

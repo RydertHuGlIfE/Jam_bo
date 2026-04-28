@@ -149,12 +149,11 @@ async def jam_websocket(websocket: WebSocket, room_id: str, username: str):
                 manager.room_states[room_id]["time"] = data.get("value", 0)
                 manager.room_states[room_id]["last_updated"] = time.time()
             elif type == "PLAY_PAUSE":
-                val = data.get("value")
-                is_playing = val if isinstance(val, bool) else val.get("value") if isinstance(val, dict) else False
+                is_playing = data.get("value", False)
                 manager.room_states[room_id]["isPlaying"] = is_playing
                 manager.room_states[room_id]["last_updated"] = time.time()
-                if isinstance(val, dict) and "time" in val:
-                    manager.room_states[room_id]["time"] = val["time"]
+                if "time" in data:
+                    manager.room_states[room_id]["time"] = data["time"]
             elif type == "TRACK_CHANGE":
                 manager.room_states[room_id]["track"] = data.get("track")
                 manager.room_states[room_id]["time"] = 0
