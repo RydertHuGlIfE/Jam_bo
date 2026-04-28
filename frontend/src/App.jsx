@@ -22,7 +22,19 @@ function App() {
   const [isKicked, setIsKicked] = useState(false)
   const [jamConnected, setJamConnected] = useState(false)
   const wsRef = useRef(null)
-  const [jamId, setJamId] = useState(new URLSearchParams(window.location.search).get('jam') || 'global')
+  const getInitialJamId = () => {
+    const urlJam = new URLSearchParams(window.location.search).get('jam');
+    if (urlJam) return urlJam;
+    
+    // Create or retrieve a personal local session for users without invites
+    let localJam = localStorage.getItem('jam_bo_local_id');
+    if (!localJam) {
+      localJam = `local_${Math.random().toString(36).substr(2, 9)}`;
+      localStorage.setItem('jam_bo_local_id', localJam);
+    }
+    return localJam;
+  };
+  const [jamId, setJamId] = useState(getInitialJamId())
   const [pendingSync, setPendingSync] = useState(null)
   const isInternalChange = useRef(false) // To prevent infinite loops on sync
   const lastSyncRef = useRef(0)
