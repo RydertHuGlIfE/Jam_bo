@@ -7,7 +7,7 @@ Jam_bo is a real-time synchronized media playback platform designed for collabor
 - Real-Time Synchronization: A server-side heartbeat (PULSE) mechanism ensures all clients maintain the same playback position.
 - Shared Queue Management: Any user in a room can add, remove, or skip tracks in the collective queue.
 - Optimized Streaming: Automatically fetches and caches YouTube streams at 360p resolution to ensure stability and low latency across various internet speeds.
-- Multi-Room Support: Create or join specific rooms for isolated jam sessions.
+- Multi-Room Support: Create or join specific rooms via invite links. Users navigating to the base URL are automatically given a private, persistent local session (no shared global room).
 - Simple Authentication: Basic user-based login system to manage sessions.
 
 ## Backend Architecture
