@@ -13,6 +13,8 @@ from contextlib import asynccontextmanager
 
 load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
 
+#room_state = global ==== NOJAM
+
 @asynccontextmanager
 async def lifespan(app:FastAPI):
     asyncio.create_task(cacher_worker())
@@ -42,7 +44,7 @@ app.add_middleware(
 
 
 class Jammanager:
-    def __init__(self): 
+    def __init__(self):                     
         self.rooms: dict[str, set[WebSocket]] = {}
         self.user_sess: dict[str, WebSocket] = {}
         # room_id -> { "isPlaying": bool, "time": float }
@@ -61,6 +63,9 @@ class Jammanager:
 
                 if not state:
                     break
+
+                if room_id=="global":
+                    continue
                 
                 if state["isPlaying"]:
                     state["time"] +=1
@@ -92,8 +97,8 @@ class Jammanager:
             "queue": self.room_queues[room_id]
         })
         
-        await self.broadcast(room_id, {"type": "PING", "user": username}, ws)
-        
+        if room_id != "global":
+            await self.broadcast(room_id, {"type": "PING", "user": username}, ws)
         self.rooms[room_id].add(ws)
         self.user_sess[username] = ws
 
@@ -110,10 +115,14 @@ class Jammanager:
             del self.user_sess[username]
 
     async def broadcast_room_queue(self, room_id: str):
+        if room_id == "global":
+            return
         queue = self.room_queues.get(room_id, [])
         await self.broadcast(room_id, {"type": "QUEUE_UPDATE", "queue": queue}, None)
 
     async def broadcast(self, room_id: str, message: dict, sender: WebSocket):
+        if room_id == "global":
+            return
         for ws in list(self.rooms.get(room_id, [])):
             try:
                 if ws != sender:
@@ -170,6 +179,11 @@ async def jam_websocket(websocket: WebSocket, room_id: str, username: str):
                 manager.room_states[room_id]["last_updated"] = time.time()
                 continue
 
+
+            if room_id == "global" and type in ("SEEK", "PULSE", "PLAY_PAUSE", "TRACK_CHANGE", "RESTART", "NEXT_TRACK", "SONG_PULSE", "KEEPALIVE_PULSE"):
+                #temp fix for global room queue i think
+                print("noting doing fo global no track sync etc ")
+                continue
 
             # Broadcast to others in the same room
             data["last_updated"] = manager.room_states[room_id].get("last_updated")
@@ -259,6 +273,10 @@ async def add_queue(track: Track, top: bool = Query(False), jam_id: str = "globa
         q.insert(0, track.model_dump())
     else:
         q.append(track.model_dump())
+
+    if jam_id == "global":
+        print("nop no queue")
+        return {"queue": []}
     
     await manager.broadcast_room_queue(jam_id)
     return {"queue": q}
