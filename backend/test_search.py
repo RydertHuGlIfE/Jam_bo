@@ -1,5 +1,5 @@
 import hashlib 
 
 
-print(hashlib.sha256("music789".encode()).hexdigest())
+print(hashlib.sha256("passwords".encode()).hexdigest())
 
