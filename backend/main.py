@@ -9,6 +9,7 @@ import json
 import os
 import time
 from dotenv import load_dotenv
+import hashlib
 from contextlib import asynccontextmanager
 
 load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
@@ -20,7 +21,6 @@ async def lifespan(app:FastAPI):
     asyncio.create_task(cacher_worker())
     yield
     
-
 app = FastAPI(lifespan=lifespan)
 
 try:
@@ -30,7 +30,7 @@ try:
     user_dict = json.loads(auth_data)
 except Exception as e:
     print(f"--- FAILED TO LOAD USERS: {e} ---")
-    user_dict = {}
+    user_dict = {}  
 
 
 app.add_middleware(
@@ -40,7 +40,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
 
 
 class Jammanager:
@@ -203,18 +202,20 @@ track_queue = []
 async def login(request: LoginRequest):
     username = request.username.strip()
     password = request.password.strip()
-    print(f"--- Login attempt --- User: [{username}] Password: [{password}]")
+    print(f"--- Login attempt --- User: [{username}]")
     
     if username not in user_dict:
         print(f"--- Error: User [{username}] not found in {list(user_dict.keys())}")
         return {"success": False, "message": "User not found"}
+
+    input_hash = hashlib.sha256(password.encode()).hexdigest()
+    stored_hash = user_dict.get(username)
         
-    stored_password = user_dict.get(username)
-    if stored_password == password:
+    if input_hash == stored_hash:
         print(f"--- Login SUCCESS for {username} ---")
         return {"success": True, "message": "Login successful", "user": username}
     else:
-        print(f"--- Error: Password mismatch for {username}. Expected: [{stored_password}], Got: [{password}]")
+        print(f"error logging in")
         return {"success": False, "message": "Invalid password"}
 
 async def cacher_worker():
@@ -384,6 +385,7 @@ async def next_queue(jam_id: str = "global"):
             'cookiesfrombrowser': ('chromium',) ,
             'no_warnings': True
         }
+
         def _fetch_next():
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 return ydl.extract_info(next_track['url'], download=False)
