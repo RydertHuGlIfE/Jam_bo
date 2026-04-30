@@ -92,8 +92,9 @@ function App() {
   const initJamSocket = (rId) => {
     if (wsRef.current) wsRef.current.close();
 
+    const token = localStorage.getItem("jam_bo_token");
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}/ws/${rId}/${sessionUser}`;
+    const wsUrl = `${protocol}//${window.location.host}/ws/${rId}/${sessionUser}?token=${token}`;
     const socket = new WebSocket(wsUrl);
     wsRef.current = socket;
 
@@ -370,24 +371,35 @@ function App() {
     }
   }
 
+  const sha256 = async (message) => {
+    const msgBuffer = new TextEncoder().encode(message);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  };
+
   const handleLogin = async (e) => {
     e.preventDefault()
     setLoginError("")
     try {
+      // Hash password before sending to keep it secure in the network tab
+      const hashedPassword = await sha256(loginForm.password);
+
       const res = await fetch(`${API_BASE}/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           username: loginForm.username,
-          password: loginForm.password
+          password: hashedPassword
         })
       });
       const data = await res.json();
       if (data.success) {
         setIsLoggedIn(true)
-        setSessionUser(data.user)
+        setSessionUser(loginForm.username)
         localStorage.setItem("jam_bo_session", "true")
-        localStorage.setItem("jam_bo_user", data.user)
+        localStorage.setItem("jam_bo_user", loginForm.username)
+        localStorage.setItem("jam_bo_token", data.token)
       } else {
         setLoginError(data.message)
       }
@@ -401,6 +413,7 @@ function App() {
     setSessionUser("")
     localStorage.removeItem("jam_bo_session")
     localStorage.removeItem("jam_bo_user")
+    localStorage.removeItem("jam_bo_token")
   }
 
   const handleSearch = async (e) => {

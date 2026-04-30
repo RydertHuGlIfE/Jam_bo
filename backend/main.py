@@ -42,10 +42,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+active_tokens = {}
 
 #for auth hehe
 def generate_secure_token(username: str):
-    tokens = secrets.token_urlsafe(32)
+    token = secrets.token_urlsafe(32)
     active_tokens[token] = username
     return token 
 
@@ -147,7 +148,13 @@ manager = Jammanager()
 
 
 @app.websocket("/ws/{room_id}/{username}")
-async def jam_websocket(websocket: WebSocket, room_id: str, username: str):
+async def jam_websocket(websocket: WebSocket, room_id: str, username: str, token: str = Query(...)):
+    if not is_tok_valid(token, username):
+        await websocket.accept()
+        await websocket.send_json({"type": "ERROR", "message": "Invalid token"})
+        await websocket.close(code=4001)
+        return
+
     await manager.connect(room_id, username, websocket)
     try:
         while True:
