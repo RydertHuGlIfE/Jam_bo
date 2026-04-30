@@ -10,6 +10,7 @@ import os
 import time
 from dotenv import load_dotenv
 import hashlib
+import secrets
 from contextlib import asynccontextmanager
 
 load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
@@ -40,6 +41,16 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+#for auth hehe
+def generate_secure_token(username: str):
+    tokens = secrets.token_urlsafe(32)
+    active_tokens[token] = username
+    return token 
+
+def is_tok_valid(token:str, username:str):
+    return active_tokens.get(token) == username
 
 
 class Jammanager:
@@ -210,10 +221,13 @@ async def login(request: LoginRequest):
 
     input_hash = hashlib.sha256(password.encode()).hexdigest()
     stored_hash = user_dict.get(username)
+
+   
         
     if input_hash == stored_hash:
+        token = generate_secure_token(request.username)
         print(f"--- Login SUCCESS for {username} ---")
-        return {"success": True, "message": "Login successful", "user": username}
+        return {"success": True, "message": "Login successful", "token": token}
     else:
         print(f"error logging in")
         return {"success": False, "message": "Invalid password"}
@@ -247,7 +261,6 @@ async def root():
 @app.get("/health")
 async def health_check():
     return {"status": "ok"}
-
 
 class Track(BaseModel):
     url: str
