@@ -1,27 +1,31 @@
 import { useState, useRef, useEffect } from 'react'
+
+// Components
+import LoginOverlay from './components/LoginOverlay'
+import Sidebar from './components/Sidebar'
+import ChatPanel from './components/ChatPanel'
+import VideoPlayer from './components/VideoPlayer'
+import SearchGrid from './components/SearchGrid'
+
 const API_BASE = "";
 
 function App() {
-  const [query, setQuery] = useState('')
-  const [videos, setVideos] = useState([])
-  const [loading, setLoading] = useState(false)
-
   // Custom Player State
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
   const [currentTrack, setCurrentTrack] = useState(null)
   const [queue, setQueue] = useState([])
+  const [loading, setLoading] = useState(false)
   const videoRef = useRef(null)
 
   // Auth State
   const [isLoggedIn, setIsLoggedIn] = useState(localStorage.getItem("jam_bo_session") === "true" && localStorage.getItem("jam_bo_token") !== null)
   const [sessionUser, setSessionUser] = useState(localStorage.getItem("jam_bo_user") || "")
-  const [loginForm, setLoginForm] = useState({ username: "", password: "" })
-  const [loginError, setLoginError] = useState("")
   const [isKicked, setIsKicked] = useState(false)
   const [jamConnected, setJamConnected] = useState(false)
   const wsRef = useRef(null)
+
   const getInitialJamId = () => {
     const urlJam = new URLSearchParams(window.location.search).get('jam');
     if (urlJam) return urlJam;
@@ -34,36 +38,16 @@ function App() {
     }
     return localJam;
   };
+
   const [jamId, setJamId] = useState(getInitialJamId())
   const [pendingSync, setPendingSync] = useState(null)
   const isInternalChange = useRef(false) // To prevent infinite loops on sync
   const lastSyncRef = useRef(0)
 
-  // Chat state
+  // Chat state (messages live here because jam sync needs them)
   const [chatMessages, setChatMessages] = useState([])
-  const [chatInput, setChatInput] = useState('')
-  const [chatOpen, setChatOpen] = useState(false)
-  const [emojiOpen, setEmojiOpen] = useState(false)
-  const chatEndRef = useRef(null)
-  const emojiPanelRef = useRef(null)
 
-  const EMOJIS = [
-    '😅', '😶', '🥲', '😑', '🙂', '🙃', '😁', '😺',
-    '😂', '😭', '💀', '🔥', '❤️', '😍', '🥹', '😊', '😎', '🤩',
-    '🫡', '🤙', '👀', '💯', '🎵', '🎶', '🎤', '🎧', '🥳', '🤯',
-    '😤', '😩', '🫠', '😴', '🤤', '👻', '💥', '✨', '🌟', '💫',
-    '🍕', '🍔', '🍜', '🧃', '🧋', '🫶', '🤝', '👑', '🐐', '🚀'
-  ]
-
-  useEffect(() => {
-    const handleClickOutside = (e) => {
-      if (emojiPanelRef.current && !emojiPanelRef.current.contains(e.target)) {
-        setEmojiOpen(false)
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [])
+  // ─── Jam WebSocket ───────────────────────────────────────────
 
   // Fetch queue on mount
   useEffect(() => {
@@ -275,19 +259,16 @@ function App() {
     }, 300);
   };
 
-  const sendChat = (e) => {
-    e.preventDefault();
-    const text = chatInput.trim();
-    if (!text || !wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+  // ─── Chat ────────────────────────────────────────────────────
+
+  const sendChat = (text) => {
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
     const msg = { type: 'CHAT', user: sessionUser, text, ts: Date.now() };
     wsRef.current.send(JSON.stringify(msg));
     setChatMessages(prev => [...prev, { user: sessionUser, text, ts: msg.ts }]);
-    setChatInput('');
   };
 
-  useEffect(() => {
-    if (chatOpen) chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [chatMessages, chatOpen]);
+  // ─── Jam Actions ─────────────────────────────────────────────
 
   const getRoomId = () => jamId || `solo_${sessionUser}`;
 
@@ -368,6 +349,8 @@ function App() {
     }
   };
 
+  // ─── Queue & Playback ───────────────────────────────────────
+
   const fetchQueue = async () => {
     try {
       const response = await fetch(`${API_BASE}/queue?jam_id=${getRoomId()}`)
@@ -375,67 +358,6 @@ function App() {
       setQueue(data.queue || [])
     } catch (err) {
       console.error('Failed to fetch queue:', err)
-    }
-  }
-
-  const sha256 = async (message) => {
-    const msgBuffer = new TextEncoder().encode(message);
-    const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-  };
-
-  const handleLogin = async (e) => {
-    e.preventDefault()
-    setLoginError("")
-    try {
-      // Hash password before sending to keep it secure in the network tab
-      const hashedPassword = await sha256(loginForm.password);
-
-      const res = await fetch(`${API_BASE}/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          username: loginForm.username,
-          password: hashedPassword
-        })
-      });
-      const data = await res.json();
-      if (data.success) {
-        setIsLoggedIn(true)
-        setSessionUser(loginForm.username)
-        localStorage.setItem("jam_bo_session", "true")
-        localStorage.setItem("jam_bo_user", loginForm.username)
-        localStorage.setItem("jam_bo_token", data.token)
-      } else {
-        setLoginError(data.message)
-      }
-    } catch (err) {
-      setLoginError("Server connection failed")
-    }
-  }
-
-  const handleLogout = () => {
-    setIsLoggedIn(false)
-    setSessionUser("")
-    localStorage.removeItem("jam_bo_session")
-    localStorage.removeItem("jam_bo_user")
-    localStorage.removeItem("jam_bo_token")
-  }
-
-  const handleSearch = async (e) => {
-    e && e.preventDefault()
-    if (!query) return
-
-    setLoading(true)
-    try {
-      const response = await fetch(`${API_BASE}/search?query=${encodeURIComponent(query)}`)
-      const data = await response.json()
-      setVideos(data.entries || [])
-    } catch (err) {
-      console.error('Search failed:', err)
-    } finally {
-      setLoading(false)
     }
   }
 
@@ -537,286 +459,87 @@ function App() {
     }
   };
 
-  const toggleFullscreen = () => {
-    if (videoRef.current) {
-      if (videoRef.current.requestFullscreen) {
-        videoRef.current.requestFullscreen();
-      } else if (videoRef.current.webkitRequestFullscreen) {
-        videoRef.current.webkitRequestFullscreen();
-      } else if (videoRef.current.msRequestFullscreen) {
-        videoRef.current.msRequestFullscreen();
-      }
+  const handleSeek = (time) => {
+    if (videoRef.current) videoRef.current.currentTime = time;
+    setCurrentTime(time);
+    // Always send directly — user-initiated, bypass isInternalChange guard
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: 'SEEK', value: time }));
     }
   };
 
-  const formatTime = (time) => {
-    if (isNaN(time)) return '0:00'
-    const mins = Math.floor(time / 60)
-    const secs = Math.floor(time % 60)
-    return `${mins}:${secs < 10 ? '0' : ''}${secs}`
+  // ─── Auth ────────────────────────────────────────────────────
+
+  const handleLogin = (username, token) => {
+    setIsLoggedIn(true)
+    setSessionUser(username)
   }
 
-  if (isKicked) {
-    return (
-      <div className="login-overlay">
-        <div className="login-card">
-          <h2 style={{ color: 'var(--accent-orange)' }}>Disconnected</h2>
-          <p style={{ marginBottom: '20px' }}>You have been logged in on another device.</p>
-          <button className="login-btn" onClick={() => window.location.reload()}>Reconnect</button>
-        </div>
-      </div>
-    )
+  const handleLogout = () => {
+    setIsLoggedIn(false)
+    setSessionUser("")
+    localStorage.removeItem("jam_bo_session")
+    localStorage.removeItem("jam_bo_user")
+    localStorage.removeItem("jam_bo_token")
   }
 
-  if (!isLoggedIn) {
+  // ─── Render ──────────────────────────────────────────────────
+
+  if (isKicked || !isLoggedIn) {
     return (
-      <div className="login-overlay">
-        <div className="login-card">
-          <h2>Jam_bo</h2>
-          <form className="login-form" onSubmit={handleLogin}>
-            <input
-              type="text"
-              placeholder="Username"
-              value={loginForm.username}
-              onChange={(e) => setLoginForm({ ...loginForm, username: e.target.value })}
-              required
-            />
-            <input
-              type="password"
-              placeholder="Password"
-              value={loginForm.password}
-              onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
-              required
-            />
-            <button type="submit" className="login-btn">Enter the Jam</button>
-            {loginError && <p className="login-error">{loginError}</p>}
-          </form>
-        </div>
-      </div>
+      <LoginOverlay
+        isKicked={isKicked}
+        onLogin={handleLogin}
+        onReconnect={() => window.location.reload()}
+      />
     )
   }
 
   return (
     <div className="app-layout">
-      {/* Sidebar Area */}
-      <aside className="sidebar-queue">
-        <div className="sidebar-header">
-          <h2>Jam_bo</h2>
-          <div className="user-profile">
-            <span className={jamConnected ? "jam-active" : ""}>
-              {jamConnected ? "● " : ""}{sessionUser}
-            </span>
-            {jamId === 'global' || jamId.startsWith('local_') ? (
-              <button className="btn-jam-start" onClick={startJam}>Start Jam</button>
-            ) : (
-              <button className="btn-jam-copy" onClick={copyInvite}>Copy Invite</button>
-            )}
-            <button className="logout-link" onClick={handleLogout}>Logout</button>
-          </div>
-        </div>
-
-        <div className="queue-section">
-          <h3>Next in Queue</h3>
-          <div className="queue-list">
-            {queue.length > 0 ? (
-              queue.map((item, index) => (
-                <div
-                  key={index}
-                  className="queue-item"
-                  onClick={() => skipToTrack(index)}
-                >
-                  <img src={item.thumbnail} alt="" className="queue-thumb" />
-                  <div className="queue-info">
-                    <div className="queue-title">{item.title}</div>
-                    <span className="queue-hint">Click to Skip</span>
-                  </div>
-                  <button
-                    className="btn-delete-queue"
-                    onClick={(e) => deleteTrack(index, e)}
-                    title="Remove from queue"
-                  >
-                    &times;
-                  </button>
-                </div>
-              ))
-            ) : (
-              <div className="queue-empty">Queue is empty</div>
-            )}
-          </div>
-        </div>
-
+      <Sidebar
+        sessionUser={sessionUser}
+        jamConnected={jamConnected}
+        jamId={jamId}
+        queue={queue}
+        onStartJam={startJam}
+        onCopyInvite={copyInvite}
+        onLogout={handleLogout}
+        onSkipToTrack={skipToTrack}
+        onDeleteTrack={deleteTrack}
+      >
         {/* Chat Panel - only show in active jam */}
         {jamId !== 'global' && (
-          <div className="chat-panel">
-            <button className="chat-toggle" onClick={() => setChatOpen(o => !o)}>
-              💬 {chatOpen ? 'Hide Chat' : 'Jam Chat'}
-              {!chatOpen && chatMessages.length > 0 && <span className="chat-badge">{chatMessages.length}</span>}
-            </button>
-            {chatOpen && (
-              <div className="chat-body">
-                <div className="chat-messages">
-                  {chatMessages.length === 0 && <div className="chat-empty">No messages yet. Say hi! 👋</div>}
-                  {chatMessages.map((m, i) => (
-                    <div key={i} className={`chat-msg ${m.user === sessionUser ? 'chat-msg-self' : ''}`}>
-                      <span className="chat-user">{m.user}: </span>
-                      <span className="chat-text">{m.text}</span>
-                    </div>
-                  ))}
-                  <div ref={chatEndRef} />
-                </div>
-                <div className="chat-input-area" ref={emojiPanelRef}>
-                  {emojiOpen && (
-                    <div className="emoji-panel">
-                      {EMOJIS.map((emoji, i) => (
-                        <button
-                          key={i}
-                          className="emoji-btn"
-                          type="button"
-                          onClick={() => setChatInput(prev => prev + emoji)}
-                        >{emoji}</button>
-                      ))}
-                    </div>
-                  )}
-                  <form className="chat-form" onSubmit={sendChat}>
-                    <button
-                      type="button"
-                      className="emoji-toggle-btn"
-                      onClick={() => setEmojiOpen(o => !o)}
-                    >😊</button>
-                    <input
-                      type="text"
-                      className="chat-input-field"
-                      placeholder="Say something..."
-                      value={chatInput}
-                      onChange={e => setChatInput(e.target.value)}
-                    />
-                    <button type="submit" className="chat-send-btn">→</button>
-                  </form>
-                </div>
-              </div>
-            )}
-          </div>
+          <ChatPanel
+            chatMessages={chatMessages}
+            sessionUser={sessionUser}
+            onSendChat={sendChat}
+          />
         )}
-      </aside>
+      </Sidebar>
 
-      {/* Main Content Area */}
       <main className="main-content">
         <div className="premium-container">
-          <form className="search-form" onSubmit={handleSearch}>
-            <input
-              type="text"
-              className="search-input"
-              placeholder="Search for vibes..."
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
-            <button type="submit" className="btn-primary" disabled={loading}>
-              {loading ? 'Searching...' : 'Search'}
-            </button>
-          </form>
+          <VideoPlayer
+            currentTrack={currentTrack}
+            isPlaying={isPlaying}
+            currentTime={currentTime}
+            duration={duration}
+            loading={loading}
+            videoRef={videoRef}
+            onTimeUpdate={() => setCurrentTime(videoRef.current.currentTime)}
+            onLoadedMetadata={handleMetadataLoaded}
+            onPlaying={onVideoPlaying}
+            onEnded={() => playNext(false)}
+            onPlay={() => setIsPlaying(true)}
+            onPause={() => setIsPlaying(false)}
+            onPlayPause={handlePlayPause}
+            onRestart={restartTrack}
+            onPlayNext={playNext}
+            onSeek={handleSeek}
+          />
 
-          {currentTrack && (
-            <div className="custom-player">
-              <div className="player-info">
-                <img src={currentTrack.thumbnail} alt="" className="player-thumb" />
-                <div>
-                  <h3>{currentTrack.title}</h3>
-                  <p>Currently Playing</p>
-                </div>
-              </div>
-
-              <div className="video-viewport">
-                <video
-                  ref={videoRef}
-                  src={currentTrack.stream_url}
-                  className="main-video-element"
-                  onError={(e) => console.error("Video Playback Error:", e.target.error)}
-                  onTimeUpdate={() => setCurrentTime(videoRef.current.currentTime)}
-                  onLoadedMetadata={handleMetadataLoaded}
-                  onPlaying={onVideoPlaying}
-                  onEnded={() => playNext(false)}
-                  onPlay={() => setIsPlaying(true)}
-                  onPause={() => setIsPlaying(false)}
-                  autoPlay
-                />
-              </div>
-
-              <div className="controls-row">
-                <div className="main-controls">
-                  <button className="aux-control" onClick={() => restartTrack(false)} title="Restart">
-                    <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z" /></svg>
-                  </button>
-
-                  <button className="play-toggle" onClick={() => handlePlayPause(false)} title={isPlaying ? "Pause" : "Play"}>
-                    {isPlaying ? (
-                      <svg viewBox="0 0 24 24" width="24" height="24" fill="black"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" /></svg>
-                    ) : (
-                      <svg viewBox="0 0 24 24" width="24" height="24" fill="black"><path d="M8 5v14l11-7z" /></svg>
-                    )}
-                  </button>
-
-                  <button className="aux-control" onClick={() => playNext(false)} title="Skip Next">
-                    <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M6 18l8.5-6L6 6zm9-12h2v12h-2z" /></svg>
-                  </button>
-
-                  <button className="aux-control" onClick={toggleFullscreen} title="Fullscreen">
-                    <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z" /></svg>
-                  </button>
-                </div>
-
-                <div className="progress-container">
-                  <span className="time-display">{formatTime(currentTime)}</span>
-                  <input
-                    type="range"
-                    className="seek-bar"
-                    min="0"
-                    max={duration || 0}
-                    value={currentTime}
-                    onChange={(e) => {
-                      const time = Number(e.target.value)
-                      if (videoRef.current) videoRef.current.currentTime = time
-                      setCurrentTime(time)
-                      // Always send directly — user-initiated, bypass isInternalChange guard
-                      if (wsRef.current?.readyState === WebSocket.OPEN) {
-                        wsRef.current.send(JSON.stringify({ type: 'SEEK', value: time }))
-                      }
-                    }}
-                  />
-                  <span className="time-display">{formatTime(duration)}</span>
-                </div>
-              </div>
-            </div>
-          )}
-
-          <div className="video-grid">
-            {videos.map((video, idx) => (
-              <div key={idx} className="video-card">
-                <div className="thumbnail-container" onClick={() => addToQueue(video, true)}>
-                  <img src={video.thumbnails[0]?.url} alt={video.title} />
-                </div>
-                <div className="video-info">
-                  <div className="video-title" onClick={() => addToQueue(video, true)}>{video.title}</div>
-                  <div className="video-meta">
-                    {video.uploader}
-                    <div className="queue-buttons">
-                      <button
-                        className="btn-next"
-                        onClick={(e) => { e.stopPropagation(); addToQueue(video, true); }}
-                      >
-                        Next
-                      </button>
-                      <button
-                        className="btn-last"
-                        onClick={(e) => { e.stopPropagation(); addToQueue(video, false); }}
-                      >
-                        + Queue
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
+          <SearchGrid onAddToQueue={addToQueue} />
         </div>
       </main>
     </div>
