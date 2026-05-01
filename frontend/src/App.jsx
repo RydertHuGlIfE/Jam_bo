@@ -15,7 +15,7 @@ function App() {
   const videoRef = useRef(null)
 
   // Auth State
-  const [isLoggedIn, setIsLoggedIn] = useState(localStorage.getItem("jam_bo_session") === "true")
+  const [isLoggedIn, setIsLoggedIn] = useState(localStorage.getItem("jam_bo_session") === "true" && localStorage.getItem("jam_bo_token") !== null)
   const [sessionUser, setSessionUser] = useState(localStorage.getItem("jam_bo_user") || "")
   const [loginForm, setLoginForm] = useState({ username: "", password: "" })
   const [loginError, setLoginError] = useState("")
@@ -113,6 +113,13 @@ function App() {
         console.log('Jam socket disconnected', e.code);
         setJamConnected(false);
         wsRef.current = null;
+        if (e.code === 4001) {
+          setIsLoggedIn(false);
+          setSessionUser("");
+          localStorage.removeItem("jam_bo_session");
+          localStorage.removeItem("jam_bo_user");
+          localStorage.removeItem("jam_bo_token");
+        }
       }
     };
 
