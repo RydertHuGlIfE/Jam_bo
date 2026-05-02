@@ -8,10 +8,10 @@ const EMOJIS = [
   '🍕', '🍔', '🍜', '🧃', '🧋', '🫶', '🤝', '👑', '🐐', '🚀'
 ]
 
-export default function ChatPanel({ 
-  chatMessages, 
-  sessionUser, 
-  onSendChat 
+export default function ChatPanel({
+  chatMessages,
+  sessionUser,
+  onSendChat
 }) {
   const [chatInput, setChatInput] = useState('')
   const [chatOpen, setChatOpen] = useState(false)
@@ -79,7 +79,7 @@ export default function ChatPanel({
                 type="button"
                 className="emoji-toggle-btn"
                 onClick={() => setEmojiOpen(o => !o)}
-              >😊</button>
+              >😀</button>
               <input
                 type="text"
                 className="chat-input-field"

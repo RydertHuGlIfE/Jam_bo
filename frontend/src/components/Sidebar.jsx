@@ -1,12 +1,12 @@
-export default function Sidebar({ 
-  sessionUser, 
-  jamConnected, 
-  jamId, 
-  queue, 
-  onStartJam, 
-  onCopyInvite, 
-  onLogout, 
-  onSkipToTrack, 
+export default function Sidebar({
+  sessionUser,
+  jamConnected,
+  jamId,
+  queue,
+  onStartJam,
+  onCopyInvite,
+  onLogout,
+  onSkipToTrack,
   onDeleteTrack,
   children  // ChatPanel gets passed as children
 }) {
@@ -27,7 +27,7 @@ export default function Sidebar({
         </div>
       </div>
 
-      <div className="queue-section">
+      <div className="queue-section" style={{ fontFamily: 'Monospace', padding: '15px' }}>
         <h3>Next in Queue</h3>
         <div className="queue-list">
           {queue.length > 0 ? (
