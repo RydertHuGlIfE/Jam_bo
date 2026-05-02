@@ -1,17 +1,18 @@
 import { useState, useRef, useEffect } from 'react'
 
-// Components
+
 import LoginOverlay from './components/LoginOverlay'
 import Sidebar from './components/Sidebar'
 import ChatPanel from './components/ChatPanel'
 import VideoPlayer from './components/VideoPlayer'
 import SearchGrid from './components/SearchGrid'
+import ClickSpark from './components/ClickSpark'
 
-// Hooks
+
 import useJamSocket from './hooks/useJamSocket'
 import useQueue from './hooks/useQueue'
 
-// ─── Helpers ──────────────────────────────────────────────────
+
 
 const getInitialJamId = () => {
   const urlJam = new URLSearchParams(window.location.search).get('jam')
@@ -25,10 +26,10 @@ const getInitialJamId = () => {
   return localJam
 }
 
-// ─── App ──────────────────────────────────────────────────────
+
 
 function App() {
-  // Player state
+
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
@@ -36,20 +37,20 @@ function App() {
   const [queue, setQueue] = useState([])
   const videoRef = useRef(null)
 
-  // Auth state
+
   const [isLoggedIn, setIsLoggedIn] = useState(
     localStorage.getItem("jam_bo_session") === "true" && localStorage.getItem("jam_bo_token") !== null
   )
   const [sessionUser, setSessionUser] = useState(localStorage.getItem("jam_bo_user") || "")
   const [isKicked, setIsKicked] = useState(false)
 
-  // Jam state
+
   const [jamId, setJamId] = useState(getInitialJamId())
   const [chatMessages, setChatMessages] = useState([])
 
   const getRoomId = () => jamId || `solo_${sessionUser}`
 
-  // ─── Hooks ────────────────────────────────────────────────────
+
 
   const handleForceLogout = () => {
     setIsLoggedIn(false)
@@ -71,7 +72,7 @@ function App() {
     onSetCurrentTime: setCurrentTime,
     onSetCurrentTrack: setCurrentTrack,
     onSetQueue: setQueue,
-    onSetLoading: () => {},
+    onSetLoading: () => { },
     onSetIsKicked: setIsKicked,
     onSetChatMessages: setChatMessages,
     onForceLogout: handleForceLogout,
@@ -86,21 +87,20 @@ function App() {
     videoRef,
   })
 
-  // Wire up circular deps: jam socket needs playNext/restartTrack,
-  // but those are defined in useQueue which needs emitJamAction from jam.
+
   useEffect(() => {
     jam.playNextRef.current = queueActions.playNext
     jam.restartTrackRef.current = queueActions.restartTrack
   })
 
-  // Fetch queue on login
+
   useEffect(() => {
     if (isLoggedIn && sessionUser) {
       queueActions.fetchQueue()
     }
   }, [isLoggedIn, sessionUser])
 
-  // ─── Video event handlers ───────────────────────────────────
+
 
   const handleMetadataLoaded = () => {
     if (videoRef.current) setDuration(videoRef.current.duration)
@@ -113,7 +113,7 @@ function App() {
     jam.sendRaw({ type: 'SEEK', value: time })
   }
 
-  // ─── Chat ───────────────────────────────────────────────────
+
 
   const sendChat = (text) => {
     const msg = { type: 'CHAT', user: sessionUser, text, ts: Date.now() }
@@ -121,7 +121,7 @@ function App() {
     setChatMessages(prev => [...prev, { user: sessionUser, text, ts: msg.ts }])
   }
 
-  // ─── Jam session controls ──────────────────────────────────
+
 
   const startJam = () => {
     const newId = Math.random().toString(36).substring(7)
@@ -134,14 +134,13 @@ function App() {
     alert("Invite link copied to clipboard!")
   }
 
-  // ─── Auth handlers ─────────────────────────────────────────
+
 
   const handleLogin = (username) => {
     setIsLoggedIn(true)
     setSessionUser(username)
   }
 
-  // ─── Render ─────────────────────────────────────────────────
 
   if (isKicked || !isLoggedIn) {
     return (
@@ -154,52 +153,63 @@ function App() {
   }
 
   return (
-    <div className="app-layout">
-      <Sidebar
-        sessionUser={sessionUser}
-        jamConnected={jam.jamConnected}
-        jamId={jamId}
-        queue={queue}
-        onStartJam={startJam}
-        onCopyInvite={copyInvite}
-        onLogout={handleForceLogout}
-        onSkipToTrack={queueActions.skipToTrack}
-        onDeleteTrack={queueActions.deleteTrack}
-      >
-        {jamId !== 'global' && (
-          <ChatPanel
-            chatMessages={chatMessages}
-            sessionUser={sessionUser}
-            onSendChat={sendChat}
-          />
-        )}
-      </Sidebar>
+    <ClickSpark
+      sparkColor="#af930c"
+      sparkSize={10}
+      sparkRadius={15}
+      sparkCount={8}
+      duration={500}
+    >
+      <div className="app-layout">
+        <Sidebar
+          sessionUser={sessionUser}
+          jamConnected={jam.jamConnected}
+          jamId={jamId}
+          queue={queue}
+          onStartJam={startJam}
+          onCopyInvite={copyInvite}
+          onLogout={handleForceLogout}
+          onSkipToTrack={queueActions.skipToTrack}
+          onDeleteTrack={queueActions.deleteTrack}
+        >
+          {jamId !== 'global' && (
+            <ChatPanel
+              chatMessages={chatMessages}
+              sessionUser={sessionUser}
+              onSendChat={sendChat}
+            />
+          )}
+        </Sidebar>
 
-      <main className="main-content">
-        <div className="premium-container">
-          <VideoPlayer
-            currentTrack={currentTrack}
-            isPlaying={isPlaying}
-            currentTime={currentTime}
-            duration={duration}
-            loading={queueActions.loading}
-            videoRef={videoRef}
-            onTimeUpdate={() => setCurrentTime(videoRef.current.currentTime)}
-            onLoadedMetadata={handleMetadataLoaded}
-            onPlaying={() => { /* playback confirmed */ }}
-            onEnded={() => queueActions.playNext(false)}
-            onPlay={() => setIsPlaying(true)}
-            onPause={() => setIsPlaying(false)}
-            onPlayPause={() => queueActions.handlePlayPause(isPlaying, false)}
-            onRestart={queueActions.restartTrack}
-            onPlayNext={queueActions.playNext}
-            onSeek={handleSeek}
-          />
+        <main className="main-content">
+          <div className="premium-container">
+            <VideoPlayer
+              currentTrack={currentTrack}
+              isPlaying={isPlaying}
+              currentTime={currentTime}
+              duration={duration}
+              loading={queueActions.loading}
+              videoRef={videoRef}
+              onTimeUpdate={() => setCurrentTime(videoRef.current.currentTime)}
+              onLoadedMetadata={handleMetadataLoaded}
+              onPlaying={() => { }}
+              onEnded={() => queueActions.playNext(false)}
+              onPlay={() => setIsPlaying(true)}
+              onPause={() => setIsPlaying(false)}
+              onPlayPause={() => queueActions.handlePlayPause(isPlaying, false)}
+              onRestart={queueActions.restartTrack}
+              onPlayNext={queueActions.playNext}
+              onSeek={handleSeek}
+            />
 
-          <SearchGrid onAddToQueue={queueActions.addToQueue} />
-        </div>
-      </main>
-    </div>
+            <SearchGrid onAddToQueue={queueActions.addToQueue} />
+
+          </div>
+        </main>
+
+      </div >
+    </ClickSpark>
+
   )
 }
 

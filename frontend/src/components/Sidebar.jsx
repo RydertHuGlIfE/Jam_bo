@@ -19,11 +19,11 @@ export default function Sidebar({
             {jamConnected ? "● " : ""}{sessionUser}
           </span>
           {jamId === 'global' || jamId.startsWith('local_') ? (
-            <button className="btn-jam-start" onClick={onStartJam}>Start Jam</button>
+            <button className="btn-jam-start" onClick={onStartJam} style={{ fontFamily: 'Monospace' }}>Start Jam</button>
           ) : (
-            <button className="btn-jam-copy" onClick={onCopyInvite}>Copy Invite</button>
+            <button className="btn-jam-copy" onClick={onCopyInvite} style={{ fontFamily: 'Monospace' }}>Copy Invite</button>
           )}
-          <button className="logout-link" onClick={onLogout}>Logout</button>
+          <button className="logout-link" onClick={onLogout} style={{ fontFamily: 'Monospace' }}>Logout</button>
         </div>
       </div>
 
