@@ -450,32 +450,30 @@ h1 {
   position: fixed;
   inset: 0;
   background: rgba(5, 15, 20, 0.95);
-  backdrop-filter: blur(12px);
-  display: flex;
-  flex-direction: row;
   z-index: 2000;
 }
 
+.lanyard-fullscreen {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+
 .login-left {
-  flex: 1;
+  position: relative;
+  z-index: 1;
+  width: 50%;
+  height: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 40px;
+  pointer-events: none;
   background: radial-gradient(ellipse at 30% 50%, rgba(88, 166, 255, 0.06) 0%, transparent 70%);
 }
 
-.login-right {
-  flex: 1;
-  position: relative;
-  overflow: hidden;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
 .login-card {
-  background: rgba(13, 17, 23, 0.7);
+  background: rgba(13, 17, 23, 0.85);
   border: 1px solid rgba(88, 166, 255, 0.15);
   border-radius: 20px;
   padding: 40px;
@@ -483,15 +481,15 @@ h1 {
   max-width: 400px;
   text-align: center;
   box-shadow: 0 0 40px rgba(88, 166, 255, 0.08);
+  pointer-events: auto;
 }
 
 @media (max-width: 768px) {
-  .login-overlay {
-    flex-direction: column;
-  }
-
-  .login-right {
-    flex: 0.6;
+  .login-left {
+    width: 100%;
+    position: absolute;
+    inset: 0;
+    justify-content: center;
   }
 }
 

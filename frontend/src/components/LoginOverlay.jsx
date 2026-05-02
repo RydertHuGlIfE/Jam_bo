@@ -45,6 +45,9 @@ export default function LoginOverlay({
   if (isKicked) {
     return (
       <div className="login-overlay">
+        <div className="lanyard-fullscreen">
+          <Lanyard position={[0, 0, 34]} gravity={[0, -40, 0]} />
+        </div>
         <div className="login-left">
           <div className="login-card">
             <h2 style={{ color: 'var(--accent-orange)' }}>Disconnected</h2>
@@ -52,15 +55,15 @@ export default function LoginOverlay({
             <button className="login-btn" onClick={onReconnect}>Reconnect</button>
           </div>
         </div>
-        <div className="login-right">
-          <Lanyard position={[0, 0, 34]} gravity={[0, -40, 0]} />
-        </div>
       </div>
     )
   }
 
   return (
     <div className="login-overlay">
+      <div className="lanyard-fullscreen">
+        <Lanyard position={[0, 0, 34]} gravity={[0, -40, 0]} />
+      </div>
       <div className="login-left">
         <div className="login-card">
           <h2>Jam_bo</h2>
@@ -83,9 +86,6 @@ export default function LoginOverlay({
             {loginError && <p className="login-error">{loginError}</p>}
           </form>
         </div>
-      </div>
-      <div className="login-right">
-        <Lanyard position={[0, 0, 34]} gravity={[0, -40, 0]} />
       </div>
     </div>
   )
