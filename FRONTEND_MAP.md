@@ -12,11 +12,16 @@ frontend/src/
 ├── main.jsx                     ← Entry point (React DOM render)
 ├── index.css                    ← All styles
 ├── components/
-│   ├── LoginOverlay.jsx         ← Login screen + kicked screen
+│   ├── LoginOverlay.jsx         ← Login screen + kicked screen + Lanyard
 │   ├── Sidebar.jsx              ← Left panel (user info, queue list)
 │   ├── ChatPanel.jsx            ← Jam Chat (messages, emoji, input)
 │   ├── VideoPlayer.jsx          ← Video + playback controls
-│   └── SearchGrid.jsx           ← Search bar + YouTube results grid
+│   ├── SearchGrid.jsx           ← Search bar + YouTube results grid
+│   ├── ClickSpark.jsx           ← Canvas-based click spark effect
+│   ├── Lanyard.jsx              ← 3D draggable lanyard card (Three.js + Rapier)
+│   ├── Lanyard.css              ← Lanyard wrapper styles
+│   ├── card.glb                 ← 3D card model asset
+│   └── lanyard.png              ← Lanyard band texture
 ├── hooks/
 │   ├── useJamSocket.js          ← WebSocket connection + sync logic
 │   └── useQueue.js              ← Queue API calls + playback actions
@@ -27,10 +32,12 @@ frontend/src/
 
 ---
 
-## App.jsx — The Boss (206 lines)
+## App.jsx — The Boss (216 lines)
 
 Ye file khud kuch heavy nahi karti. Bas sab hooks aur components ko wire karta hai — 
 isko samjho ek controller jaisa, jo baaki sab files ko connect karta hai.
+
+**Naya:** Poora app `<ClickSpark>` component mein wrapped hai — har click pe gold sparks dikhte hain.
 
 ### State jo yahan rehta hai:
 
@@ -264,11 +271,38 @@ Backend ke `/queue/*` endpoints se baat karta hai. Saare HTTP API calls yahan ha
 
 ---
 
-## components/LoginOverlay.jsx — Login Screen (81 lines)
+## components/LoginOverlay.jsx — Login Screen (92 lines)
+
+### Layout — Split Screen Design:
+```
+┌─────────────────────────────────────────────────────┐
+│ .login-overlay (fixed, fullscreen)                   │
+│                                                      │
+│   .lanyard-fullscreen ← absolute, full screen, z:0   │
+│   ┌───────────────────────────────────────────────┐  │
+│   │          3D Lanyard Canvas                     │  │
+│   │     (draggable card, hangs from top)           │  │
+│   └───────────────────────────────────────────────┘  │
+│                                                      │
+│   .login-left ← relative, z:1, left 50%, ptr:none   │
+│   ┌──────────────────┐                               │
+│   │  .login-card      │ ← pointer-events: auto       │
+│   │  [Jam_bo]         │                               │
+│   │  [username    ]   │                               │
+│   │  [password    ]   │                               │
+│   │  [Enter the Jam]  │                               │
+│   └──────────────────┘                               │
+└─────────────────────────────────────────────────────┘
+```
+
+- **Lanyard** covers entire screen as background (z-index: 0)
+- **Login form** floats on left half (z-index: 1)
+- **Pointer events:** `.login-left` has `pointer-events: none` so clicks pass through to the 3D canvas. `.login-card` re-enables `pointer-events: auto` for form interaction.
+- **Mobile:** Below 768px, `.login-left` goes full width and overlays the canvas.
 
 ### Kab dikhta hai:
-- `isLoggedIn === false` → Normal login form
-- `isKicked === true` → "Disconnected — You have been logged in on another device" + Reconnect button
+- `isLoggedIn === false` → Normal login form + Lanyard
+- `isKicked === true` → "Disconnected" card + Lanyard
 
 ### State (local — sirf iske andar):
 | State | Kya hai |
@@ -450,6 +484,101 @@ Browser-compatible fullscreen: `requestFullscreen()` → `webkitRequestFullscree
 - `125` → `"2:05"`
 - `0` → `"0:00"`
 - Used in VideoPlayer seekbar time display
+
+---
+
+## components/ClickSpark.jsx — Click Spark Effect (161 lines)
+
+Canvas-based particle effect jo har click pe radial sparks dikhata hai.
+
+### Props:
+| Prop | Default | Kya hai |
+|---|---|---|
+| `sparkColor` | `'#fff'` | Spark lines ka color |
+| `sparkSize` | `10` | Spark line ki initial length |
+| `sparkRadius` | `15` | Kitna door tak sparks travel karein |
+| `sparkCount` | `8` | Kitne spark lines generate hon |
+| `duration` | `400` | Animation duration (ms) |
+| `easing` | `'ease-out'` | Animation easing (`linear`, `ease-in`, `ease-in-out`) |
+| `extraScale` | `1.0` | Radius multiplier |
+
+### Kaise kaam karta hai:
+1. Wrapper `<div>` pe `onClick` handler lagta hai
+2. Click position se `sparkCount` lines generate hoti hain (equal angle spacing)
+3. `requestAnimationFrame` loop mein har line outward animate hoti hai (easing ke saath)
+4. Line length shrink hoti hai jaise distance badhta hai → fade-out effect
+5. Canvas `pointerEvents: none` hai → click children elements pe pass through hota hai
+
+### App mein usage:
+```jsx
+<ClickSpark sparkColor="#af930c" sparkCount={8} duration={500}>
+  <div className="app-layout">...</div>
+</ClickSpark>
+```
+
+---
+
+## components/Lanyard.jsx — 3D Draggable Lanyard Card (195 lines)
+
+Three.js + React Three Fiber + Rapier physics se bana hua interactive 3D lanyard.
+Login screen pe full-screen background mein render hota hai.
+
+### Dependencies:
+- `three` — 3D rendering
+- `@react-three/fiber` — React wrapper for Three.js
+- `@react-three/drei` — Helpers (useGLTF, useTexture, Environment, Lightformer)
+- `@react-three/rapier` — Physics engine (RigidBody, joints, colliders)
+- `meshline` — Smooth rope rendering
+
+### Assets:
+- `card.glb` — 3D card model (editable at https://modelviewer.dev/editor/)
+- `lanyard.png` — Band texture (editable in any image editor)
+
+### Vite Config:
+`assetsInclude: ['**/*.glb']` required in `vite.config.js`
+
+### Props (Lanyard component):
+| Prop | Default | Kya hai |
+|---|---|---|
+| `position` | `[0, 0, 30]` | Camera position |
+| `gravity` | `[0, -40, 0]` | Physics gravity vector |
+| `fov` | `20` | Camera field of view |
+| `transparent` | `true` | Transparent canvas background |
+
+### Physics Structure (Band component):
+```
+fixed (top anchor, y=8) ── rope ── j1 ── rope ── j2 ── rope ── j3 ── spherical joint ── card
+```
+- **4 RigidBody nodes:** `fixed` (static anchor at top), `j1`, `j2`, `j3` (dynamic rope segments)
+- **3 RopeJoints:** Connect fixed→j1→j2→j3 (rope physics)
+- **1 SphericalJoint:** j3→card (card hangs from rope end)
+- **CatmullRomCurve3:** Smooth rope rendered through the 4 joint positions using MeshLine
+
+### Drag Interaction:
+1. `onPointerDown` → capture pointer, calculate offset from card center
+2. Card switches to `kinematicPosition` type → user controls position
+3. `useFrame` → unproject mouse position to 3D coordinates → `setNextKinematicTranslation()`
+4. `onPointerUp` → release, card switches back to `dynamic` → falls with physics
+5. All joints wake up during drag to keep rope responsive
+
+### Rope Rendering:
+- `MeshLineGeometry` + `MeshLineMaterial` with lanyard.png texture
+- Points updated every frame from joint positions via `CatmullRomCurve3`
+- Mobile: 16 curve segments, Desktop: 32 segments
+
+### Mobile Optimizations:
+- Lower DPR: `[1, 1.5]` vs desktop `[1, 2]`
+- No clearcoat on card material
+- Physics timestep: `1/30` vs `1/60`
+- Fewer curve segments
+
+---
+
+## Lanyard.css (12 lines)
+
+Simple wrapper styling:
+- `.lanyard-wrapper` — `width: 100%; height: 100%; position: relative`
+- `.lanyard-wrapper canvas` — `display: block; width: 100%; height: 100%`
 
 ---
 
