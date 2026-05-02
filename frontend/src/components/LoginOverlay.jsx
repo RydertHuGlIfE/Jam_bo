@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import { sha256 } from '../utils/crypto'
+import Lanyard from './Lanyard'
 
 const API_BASE = "";
 
-export default function LoginOverlay({ 
-  isKicked, 
-  onLogin, 
-  onReconnect 
+export default function LoginOverlay({
+  isKicked,
+  onLogin,
+  onReconnect
 }) {
   const [loginForm, setLoginForm] = useState({ username: "", password: "" })
   const [loginError, setLoginError] = useState("")
@@ -44,10 +45,15 @@ export default function LoginOverlay({
   if (isKicked) {
     return (
       <div className="login-overlay">
-        <div className="login-card">
-          <h2 style={{ color: 'var(--accent-orange)' }}>Disconnected</h2>
-          <p style={{ marginBottom: '20px' }}>You have been logged in on another device.</p>
-          <button className="login-btn" onClick={onReconnect}>Reconnect</button>
+        <div className="login-left">
+          <div className="login-card">
+            <h2 style={{ color: 'var(--accent-orange)' }}>Disconnected</h2>
+            <p style={{ marginBottom: '20px' }}>You have been logged in on another device.</p>
+            <button className="login-btn" onClick={onReconnect}>Reconnect</button>
+          </div>
+        </div>
+        <div className="login-right">
+          <Lanyard position={[0, 0, 34]} gravity={[0, -40, 0]} />
         </div>
       </div>
     )
@@ -55,26 +61,31 @@ export default function LoginOverlay({
 
   return (
     <div className="login-overlay">
-      <div className="login-card">
-        <h2>Jam_bo</h2>
-        <form className="login-form" onSubmit={handleLogin}>
-          <input
-            type="text"
-            placeholder="Username"
-            value={loginForm.username}
-            onChange={(e) => setLoginForm({ ...loginForm, username: e.target.value })}
-            required
-          />
-          <input
-            type="password"
-            placeholder="Password"
-            value={loginForm.password}
-            onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
-            required
-          />
-          <button type="submit" className="login-btn">Enter the Jam</button>
-          {loginError && <p className="login-error">{loginError}</p>}
-        </form>
+      <div className="login-left">
+        <div className="login-card">
+          <h2>Jam_bo</h2>
+          <form className="login-form" onSubmit={handleLogin}>
+            <input
+              type="text"
+              placeholder="Username"
+              value={loginForm.username}
+              onChange={(e) => setLoginForm({ ...loginForm, username: e.target.value })}
+              required
+            />
+            <input
+              type="password"
+              placeholder="Password"
+              value={loginForm.password}
+              onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
+              required
+            />
+            <button type="submit" className="login-btn">Enter the Jam</button>
+            {loginError && <p className="login-error">{loginError}</p>}
+          </form>
+        </div>
+      </div>
+      <div className="login-right">
+        <Lanyard position={[0, 0, 34]} gravity={[0, -40, 0]} />
       </div>
     </div>
   )
