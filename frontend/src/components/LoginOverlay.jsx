@@ -68,7 +68,7 @@ export default function LoginOverlay({
           hoverScale={1.2}
           parallax={0.05}
           clickBurst={false}
-          centerOffset={[-0.2, 0]}
+          centerOffset={[-0.3133, 0]}
         />
       </div>
 
