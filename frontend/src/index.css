@@ -468,9 +468,9 @@ h1 {
   align-items: center;
   justify-content: center;
   padding: 40px;
-  padding-left: 200px;
   pointer-events: none;
-  background: radial-gradient(ellipse at 30% 50%, rgba(88, 166, 255, 0.06) 0%, transparent 70%);
+  background: none;
+  transform: translateX(100px);
 }
 
 .login-card {
@@ -491,7 +491,8 @@ h1 {
     position: absolute;
     inset: 0;
     justify-content: center;
-    padding-left: 40px;
+    padding: 20px;
+    transform: none;
   }
 }
 

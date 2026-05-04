@@ -17,7 +17,7 @@ uniform float uBaseRadius, uRadiusStep, uScaleRate;
 uniform float uOpacity, uNoiseAmount, uRotation, uRingGap;
 uniform float uFadeIn, uFadeOut;
 uniform float uMouseInfluence, uHoverAmount, uHoverScale, uParallax, uBurst;
-uniform vec2 uResolution, uMouse;
+uniform vec2 uResolution, uMouse, uCenterOffset;
 uniform vec3 uColor, uColorTwo;
 uniform int uRingCount;
 
@@ -42,6 +42,7 @@ float ring(vec2 p, float ri, float cut, float t0, float px) {
 void main() {
   float px = 1.0 / min(uResolution.x, uResolution.y);
   vec2 p = (gl_FragCoord.xy - 0.5 * uResolution.xy) * px;
+  p -= uCenterOffset;
   float cr = cos(uRotation), sr = sin(uRotation);
   p = mat2(cr, -sr, sr, cr) * p;
   p -= uMouse * uMouseInfluence;
@@ -85,6 +86,7 @@ export default function MagicRings({
     hoverScale = 1.2,
     parallax = 0.05,
     clickBurst = false,
+    centerOffset = [0, 0],
 }) {
     const mountRef = useRef(null);
     const propsRef = useRef(null);
@@ -98,7 +100,7 @@ export default function MagicRings({
         color, colorTwo, speed, ringCount, attenuation, lineThickness,
         baseRadius, radiusStep, scaleRate, opacity, noiseAmount,
         rotation, ringGap, fadeIn, fadeOut, followMouse, mouseInfluence,
-        hoverScale, parallax, clickBurst,
+        hoverScale, parallax, clickBurst, centerOffset,
     };
 
     useEffect(() => {
@@ -147,6 +149,7 @@ export default function MagicRings({
             uHoverScale: { value: 1 },
             uParallax: { value: 0 },
             uBurst: { value: 0 },
+            uCenterOffset: { value: new THREE.Vector2() },
         };
 
         const material = new THREE.ShaderMaterial({ vertexShader, fragmentShader, uniforms, transparent: true });
@@ -217,6 +220,7 @@ export default function MagicRings({
             uniforms.uHoverScale.value = p.hoverScale;
             uniforms.uParallax.value = p.parallax;
             uniforms.uBurst.value = p.clickBurst ? burstRef.current : 0;
+            uniforms.uCenterOffset.value.set(p.centerOffset[0], p.centerOffset[1]);
 
             renderer.render(scene, camera);
         };
