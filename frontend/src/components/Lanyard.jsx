@@ -91,12 +91,12 @@ function Band({ maxSpeed = 50, minSpeed = 0, isMobile = false }) {
     const [dragged, drag] = useState(false);
     const [hovered, hover] = useState(false);
 
-    useRopeJoint(fixed, j1, [[0, 0, 0], [0, 0, 0], 1]);
-    useRopeJoint(j1, j2, [[0, 0, 0], [0, 0, 0], 1]);
-    useRopeJoint(j2, j3, [[0, 0, 0], [0, 0, 0], 1]);
+    useRopeJoint(fixed, j1, [[0, 0, 0], [0, 0, 0], 0.5]);
+    useRopeJoint(j1, j2, [[0, 0, 0], [0, 0, 0], 0.5]);
+    useRopeJoint(j2, j3, [[0, 0, 0], [0, 0, 0], 0.5]);
     useSphericalJoint(j3, card, [
         [0, 0, 0],
-        [0, 1.5, 0]
+        [0, 0.95, 0]
     ]);
 
     useEffect(() => {
@@ -139,7 +139,7 @@ function Band({ maxSpeed = 50, minSpeed = 0, isMobile = false }) {
 
     return (
         <>
-            <group position={[0, 8, 0]}>
+            <group position={[isMobile ? 0 : 7, 4.5, 0]}>
                 <RigidBody ref={fixed} {...segmentProps} type="fixed" />
                 <RigidBody position={[0.5, 0, 0]} ref={j1} {...segmentProps}>
                     <BallCollider args={[0.1]} />
@@ -151,9 +151,9 @@ function Band({ maxSpeed = 50, minSpeed = 0, isMobile = false }) {
                     <BallCollider args={[0.1]} />
                 </RigidBody>
                 <RigidBody position={[2, 0, 0]} ref={card} {...segmentProps} type={dragged ? 'kinematicPosition' : 'dynamic'}>
-                    <CuboidCollider args={[0.8, 1.125, 0.01]} />
+                    <CuboidCollider args={[0.8, 0.95, 0.01]} />
                     <group
-                        scale={2.25}
+                        scale={[2.25, 1.8, 2.25]}
                         position={[0, -1.2, -0.05]}
                         onPointerOver={() => hover(true)}
                         onPointerOut={() => hover(false)}
