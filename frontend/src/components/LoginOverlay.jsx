@@ -63,7 +63,7 @@ export default function LoginOverlay({
                 scaleRate={0.1}
                 opacity={1}
                 blur={0}
-                noiseAmount={0.1}
+                noiseAmount={0}
                 rotation={0}
                 ringGap={1.5}
                 fadeIn={0.7}
@@ -106,7 +106,7 @@ export default function LoginOverlay({
               scaleRate={0.1}
               opacity={1}
               blur={0}
-              noiseAmount={0.1}
+              noiseAmount={0}
               rotation={0}
               ringGap={1.5}
               fadeIn={0.7}

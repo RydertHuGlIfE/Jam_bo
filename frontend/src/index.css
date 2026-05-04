@@ -474,14 +474,14 @@ h1 {
 }
 
 .login-card {
-  background: rgba(13, 17, 23, 0.85);
-  border: 1px solid rgba(88, 166, 255, 0.15);
+  background: transparent;
+  border: none;
   border-radius: 20px;
   padding: 40px;
   width: 100%;
   max-width: 400px;
   text-align: center;
-  box-shadow: 0 0 40px rgba(88, 166, 255, 0.08);
+  box-shadow: none;
   pointer-events: auto;
 }
 
@@ -499,7 +499,7 @@ h1 {
   font-family: 'Outfit', sans-serif;
   font-size: 2.5rem;
   margin-bottom: 30px;
-  background: linear-gradient(45deg, #39FF14, #58a6ff);
+  background: linear-gradient(45deg, #FF3B30, #FF6B6B);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
