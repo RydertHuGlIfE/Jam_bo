@@ -1,0 +1,65 @@
+.target-cursor-wrapper {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 30px;
+  height: 30px;
+  pointer-events: none;
+  z-index: 999999;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  mix-blend-mode: difference;
+}
+
+.target-cursor-dot {
+  width: 4px;
+  height: 4px;
+  background: #00FF41;
+  box-shadow: 0 0 10px rgba(0, 255, 65, 0.5);
+}
+
+.target-cursor-corner {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border-color: #00FF41;
+  border-style: solid;
+  pointer-events: none;
+  transition: border-width 0.1s steps(2);
+}
+
+.corner-tl {
+  top: -10px;
+  left: -10px;
+  border-width: 2px 0 0 2px;
+}
+
+.corner-tr {
+  top: -10px;
+  right: -10px;
+  border-width: 2px 2px 0 0;
+}
+
+.corner-br {
+  bottom: -10px;
+  right: -10px;
+  border-width: 0 2px 2px 0;
+}
+
+.corner-bl {
+  bottom: -10px;
+  left: -10px;
+  border-width: 0 0 2px 2px;
+}
+
+/* Ensure the default cursor is hidden globally when TargetCursor is active */
+body.hide-cursor {
+  cursor: none !important;
+}
+
+body.hide-cursor a,
+body.hide-cursor button,
+body.hide-cursor input {
+  cursor: none !important;
+}
