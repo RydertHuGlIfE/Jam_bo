@@ -88,12 +88,22 @@ const TargetCursor = ({
         createSpinTimeline();
 
         const tickerFn = () => {
-            if (!targetCornerPositionsRef.current || !cursorRef.current || !cornersRef.current) {
+            if (!isActiveRef.current || !cursorRef.current || !cornersRef.current || !activeTarget) {
                 return;
             }
 
             const strength = activeStrengthRef.current;
             if (strength === 0) return;
+
+            // Dynamically update target position to handle scroll/movement
+            const rect = activeTarget.getBoundingClientRect();
+            const { borderWidth, cornerSize } = constants;
+            targetCornerPositionsRef.current = [
+                { x: rect.left - borderWidth, y: rect.top - borderWidth },
+                { x: rect.right + borderWidth - cornerSize, y: rect.top - borderWidth },
+                { x: rect.right + borderWidth - cornerSize, y: rect.bottom + borderWidth - cornerSize },
+                { x: rect.left - borderWidth, y: rect.bottom + borderWidth - cornerSize }
+            ];
 
             const cursorX = gsap.getProperty(cursorRef.current, 'x');
             const cursorY = gsap.getProperty(cursorRef.current, 'y');
@@ -109,13 +119,13 @@ const TargetCursor = ({
                 const finalX = currentX + (targetX - currentX) * strength;
                 const finalY = currentY + (targetY - currentY) * strength;
 
-                const duration = strength >= 0.99 ? (parallaxOn ? 0.2 : 0) : 0.05;
+                const duration = strength >= 0.99 ? (parallaxOn ? 0.05 : 0) : 0.05;
 
                 gsap.to(corner, {
                     x: finalX,
                     y: finalY,
                     duration: duration,
-                    ease: duration === 0 ? 'none' : 'power1.out',
+                    ease: 'none',
                     overwrite: 'auto'
                 });
             });
