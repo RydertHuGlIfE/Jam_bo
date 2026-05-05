@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { sha256 } from '../utils/crypto'
 import Lanyard from './Lanyard'
-import MagicRings from './MagicRings'
+import './LoginOverlay.css'
 
 const API_BASE = "";
 
@@ -17,7 +17,6 @@ export default function LoginOverlay({
     e.preventDefault()
     setLoginError("")
     try {
-      // Hash password before sending to keep it secure in the network tab
       const hashedPassword = await sha256(loginForm.password);
 
       const res = await fetch(`${API_BASE}/login`, {
@@ -30,7 +29,6 @@ export default function LoginOverlay({
       });
       const data = await res.json();
       if (data.success) {
-        // Save to storage BEFORE updating state to avoid race conditions
         localStorage.setItem("jam_bo_session", "true")
         localStorage.setItem("jam_bo_user", loginForm.username)
         localStorage.setItem("jam_bo_token", data.token)
@@ -39,38 +37,14 @@ export default function LoginOverlay({
         setLoginError(data.message)
       }
     } catch (err) {
-      setLoginError("Server connection failed")
+      setLoginError("SYSTEM_FAILURE: CONNECTION_LOST")
     }
   }
 
   return (
     <div className="login-overlay">
-      <div style={{ position: 'absolute', inset: 0, zIndex: 0, pointerEvents: 'none' }}>
-        <MagicRings
-          color="#FF3B30"
-          colorTwo="#FF6B6B"
-          ringCount={6}
-          speed={1}
-          attenuation={10}
-          lineThickness={2}
-          baseRadius={0.3}
-          radiusStep={0.03}
-          scaleRate={0.1}
-          opacity={1}
-          blur={0}
-          noiseAmount={0}
-          rotation={0}
-          ringGap={1.5}
-          fadeIn={0.7}
-          fadeOut={0.5}
-          followMouse={false}
-          mouseInfluence={0.2}
-          hoverScale={1.2}
-          parallax={0.05}
-          clickBurst={false}
-          centerOffset={[-0.3133, 0]}
-        />
-      </div>
+      <div className="pixel-bg" />
+      <div className="scanlines" />
 
       <div className="lanyard-fullscreen">
         <Lanyard position={[0, 0, 34]} gravity={[0, -40, 0]} />
@@ -78,30 +52,36 @@ export default function LoginOverlay({
 
       <div className="login-left">
         {isKicked ? (
-          <div className="login-card" style={{ position: 'relative', zIndex: 1 }}>
-            <h2 style={{ color: 'var(--accent-orange)' }}>Disconnected</h2>
-            <p style={{ marginBottom: '20px' }}>You have been logged in on another device.</p>
-            <button className="login-btn" onClick={onReconnect}>Reconnect</button>
+          <div className="pixel-card">
+            <h2 style={{ color: '#FF003C' }}>SYSTEM_DISCONNECT</h2>
+            <p style={{ marginBottom: '20px', color: '#00FF41' }}>ERROR: SESSION_TAKEN_BY_OTHER_ID</p>
+            <button className="pixel-btn" style={{ width: '100%' }} onClick={onReconnect}>RE_BOOT</button>
           </div>
         ) : (
-          <div className="login-card" style={{ position: 'relative', zIndex: 1 }}>
-            <h2>Jam_bo</h2>
+          <div className="pixel-card">
+            <h2>JAM_BO v1.0</h2>
             <form className="login-form" onSubmit={handleLogin}>
-              <input
-                type="text"
-                placeholder="Username"
-                value={loginForm.username}
-                onChange={(e) => setLoginForm({ ...loginForm, username: e.target.value })}
-                required
-              />
-              <input
-                type="password"
-                placeholder="Password"
-                value={loginForm.password}
-                onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
-                required
-              />
-              <button type="submit" className="login-btn">Enter the Jam</button>
+              <div className="pixel-input-wrapper">
+                <input
+                  className="pixel-form-input"
+                  type="text"
+                  placeholder="USER_ID"
+                  value={loginForm.username}
+                  onChange={(e) => setLoginForm({ ...loginForm, username: e.target.value })}
+                  required
+                />
+              </div>
+              <div className="pixel-input-wrapper">
+                <input
+                  className="pixel-form-input"
+                  type="password"
+                  placeholder="ACCESS_CODE"
+                  value={loginForm.password}
+                  onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
+                  required
+                />
+              </div>
+              <button type="submit" className="pixel-btn">INITIALIZE_JAM</button>
               {loginError && <p className="login-error">{loginError}</p>}
             </form>
           </div>
