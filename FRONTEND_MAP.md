@@ -17,7 +17,6 @@ frontend/src/
 │   ├── ChatPanel.jsx            ← Jam Chat (messages, emoji, input)
 │   ├── VideoPlayer.jsx          ← Video + playback controls
 │   ├── SearchGrid.jsx           ← Search bar + YouTube results grid
-│   ├── ClickSpark.jsx           ← Canvas-based click spark effect
 │   ├── Lanyard.jsx              ← 3D draggable lanyard card (Three.js + Rapier)
 │   ├── Lanyard.css              ← Lanyard wrapper styles
 │   ├── card.glb                 ← 3D card model asset
