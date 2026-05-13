@@ -54,7 +54,7 @@ export default function LoginOverlay({
         {isKicked ? (
           <div className="pixel-card">
             <h2 style={{ color: '#FF003C' }}>SYSTEM_DISCONNECT</h2>
-            <p style={{ marginBottom: '20px', color: '#00FF41' }}>ERROR: SESSION_TAKEN_BY_OTHER_ID</p>
+            <p style={{ marginBottom: '20px', color: '#FF3131' }}>ERROR: SESSION_TAKEN_BY_OTHER_ID</p>
             <button className="pixel-btn" style={{ width: '100%' }} onClick={onReconnect}>RE_BOOT</button>
           </div>
         ) : (

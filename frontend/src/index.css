@@ -6,7 +6,7 @@
   --bg-color: #0d1117;
   --surface-color: #161b22;
   --primary-color: #58a6ff;
-  --accent-cyan: #39FF14;
+  --accent-cyan: #FF3131;
   --accent-orange: #ff7b72;
   --text-primary: #f0f6fc;
   --text-secondary: #8b949e;
@@ -460,8 +460,8 @@ h1 {
 
 .user-profile span.jam-active {
   color: var(--accent-cyan);
-  background: rgba(57, 255, 20, 0.2);
-  box-shadow: 0 0 10px rgba(57, 255, 20, 0.2);
+  background: rgba(255, 49, 49, 0.2);
+  box-shadow: 0 0 10px rgba(255, 49, 49, 0.2);
   border: 1px solid var(--accent-cyan);
 }
 
@@ -668,7 +668,7 @@ h1 {
 }
 
 .emoji-btn:hover {
-  background: rgba(57, 255, 20, 0.15);
+  background: rgba(255, 49, 49, 0.15);
   transform: scale(1.2);
 }
 
