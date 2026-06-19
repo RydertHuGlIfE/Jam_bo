@@ -85,7 +85,6 @@ export default function useJamSocket({
   // ─── Emit (send to server) ──────────────────────────────────
 
   const emitJamAction = (type, value) => {
-    if (isInternalChange.current) return
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       const payload = (typeof value === 'object' && value !== null)
         ? { type, ...value }
@@ -104,9 +103,12 @@ export default function useJamSocket({
   // ─── Keep-alive heartbeat ───────────────────────────────────
 
   useEffect(() => {
-    if (isPlaying && jamConnected && !isInternalChange.current) {
+    if (isPlaying && jamConnected) {
       const interval = setInterval(() => {
-        emitJamAction('KEEPALIVE_PULSE', { time: videoRef.current?.currentTime || 0 })
+        // Guard pulse echoes only — not user actions
+        if (!isInternalChange.current) {
+          emitJamAction('KEEPALIVE_PULSE', { time: videoRef.current?.currentTime || 0 })
+        }
       }, 10000)
       return () => clearInterval(interval)
     }
@@ -181,14 +183,28 @@ export default function useJamSocket({
         break
       }
 
-      case 'SYNC':
       case 'PLAY_PAUSE': {
         isInternalChange.current = true
-        let msgState = data.state
-        if (!msgState) {
-          if (data.type === 'PLAY_PAUSE') msgState = { isPlaying: data.value, time: data.time, last_updated: data.last_updated || Date.now() / 1000 }
-          if (data.type === 'SEEK') msgState = { time: data.value, last_updated: data.last_updated || Date.now() / 1000 }
+        const shouldPlay = data.value
+        if (shouldPlay) {
+          if (data.time !== undefined && videoRef.current && Math.abs(videoRef.current.currentTime - data.time) > 1.5) {
+            videoRef.current.currentTime = data.time
+          }
+          videoRef.current?.play().catch(() => onSetIsPlaying(false))
+          onSetIsPlaying(true)
+        } else {
+          if (data.time !== undefined && videoRef.current) {
+            videoRef.current.currentTime = data.time
+          }
+          videoRef.current?.pause()
+          onSetIsPlaying(false)
         }
+        break
+      }
+
+      case 'SYNC': {
+        isInternalChange.current = true
+        let msgState = data.state
         const incomingTrack = data.track || msgState?.track
         if (data.queue) onSetQueue(data.queue)
 
@@ -281,9 +297,10 @@ export default function useJamSocket({
           sendRaw({
             type: 'SYNC',
             state: {
-              track: currentTrack,
+              track: { ...currentTrack, stream_url: videoRef.current?.src || currentTrack.stream_url },
               time: videoRef.current?.currentTime || 0,
-              isPlaying: true
+              isPlaying: true,
+              last_updated: Date.now() / 1000
             }
           })
         }
@@ -296,7 +313,10 @@ export default function useJamSocket({
     }
 
     // Reset internal change flag after state updates settle
-    setTimeout(() => { isInternalChange.current = false }, 300)
+    // Only needed for messages that affected playback state
+    if (!['QUEUE_UPDATE', 'PING', 'CHAT'].includes(data.type)) {
+      setTimeout(() => { isInternalChange.current = false }, 300)
+    }
   }
 
   return {

@@ -41,11 +41,11 @@ export default function SearchGrid({ onAddToQueue }) {
       <div className="video-grid">
         {videos.map((video, idx) => (
           <div key={idx} className="video-card">
-            <div className="thumbnail-container" onClick={() => onAddToQueue(video, true)}>
+            <div className="thumbnail-container" onClick={() => onAddToQueue(video, false)}>
               <img src={video.thumbnails[0]?.url} alt={video.title} />
             </div>
             <div className="video-info">
-              <div className="video-title" onClick={() => onAddToQueue(video, true)}>{video.title}</div>
+              <div className="video-title" onClick={() => onAddToQueue(video, false)}>{video.title}</div>
               <div className="video-meta">
                 {video.uploader}
                 <div className="queue-buttons">

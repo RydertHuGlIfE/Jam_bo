@@ -189,6 +189,7 @@ async def jam_websocket(websocket: WebSocket, room_id: str, username: str, token
             elif type=="SONG_PULSE":
                 manager.room_states[room_id]["time"] = data.get("value", data.get("time", 0))
                 manager.room_states[room_id]["last_updated"] = time.time()
+                continue  # Don't rebroadcast — server heartbeat handles pulse distribution
             elif type == "KEEPALIVE_PULSE":
                 # Just update state without broadcasting to avoid "echo" syncs
                 manager.room_states[room_id]["time"] = data.get("value", data.get("time", 0))

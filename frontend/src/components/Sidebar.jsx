@@ -33,7 +33,7 @@ export default function Sidebar({
           {queue.length > 0 ? (
             queue.map((item, index) => (
               <div
-                key={index}
+                key={`${item.url}-${index}`}
                 className="queue-item"
                 onClick={() => onSkipToTrack(index)}
               >

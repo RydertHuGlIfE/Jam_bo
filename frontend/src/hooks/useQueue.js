@@ -39,10 +39,6 @@ export default function useQueue({
       })
       const data = await response.json()
       onSetQueue(data.queue || [])
-
-      if (top) {
-        playNext(false)
-      }
     } catch (err) {
       console.error('Failed to add to queue:', err)
     }
@@ -50,6 +46,14 @@ export default function useQueue({
 
   const playNext = async (fromRemote = false) => {
     if (loading) return
+    // When triggered by a remote NEXT_TRACK event (empty queue signal),
+    // just clear local state — don't hit the API again (would double-pop or get wrong data)
+    if (fromRemote) {
+      onSetCurrentTrack(null)
+      onSetIsPlaying(false)
+      onSetQueue([])
+      return
+    }
     setLoading(true)
     try {
       const response = await fetch(`${API_BASE}/queue/next?jam_id=${getRoomId()}`)
@@ -59,9 +63,9 @@ export default function useQueue({
         onSetCurrentTrack(data)
         onSetIsPlaying(true)
         onSetQueue(data.queue || [])
-        if (!fromRemote) emitJamAction('TRACK_CHANGE', { track: data })
+        emitJamAction('TRACK_CHANGE', { track: data })
       } else {
-        if (!fromRemote) emitJamAction('NEXT_TRACK', {})
+        emitJamAction('NEXT_TRACK', {})
         onSetCurrentTrack(null)
         onSetIsPlaying(false)
         onSetQueue([])
