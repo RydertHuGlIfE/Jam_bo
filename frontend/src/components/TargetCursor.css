@@ -20,8 +20,8 @@
   transform: translate(-50%, -50%);
   width: 4px;
   height: 4px;
-  background: #610a0a;
-  box-shadow: 0 0 6px rgba(97, 10, 10, 0.4);
+  background: #FF3131;
+  box-shadow: 0 0 8px rgba(255, 49, 49, 0.8);
   z-index: 10002;
 }
 
@@ -29,7 +29,7 @@
   position: absolute;
   width: 12px;
   height: 12px;
-  border-color: #610a0a;
+  border-color: #FF3131;
   border-style: solid;
   pointer-events: none;
   z-index: 10001;
