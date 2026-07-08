@@ -41,7 +41,7 @@ graph TD
 - Framework: FastAPI (Python)
 - Real-Time: WebSockets for low-latency state synchronization.
 - Media Processing: yt-dlp for fetching and optimizing media streams.
-- Environment: Python 3.10+
+- Environment: Python 3.xx+
 
 ### Frontend
 - Framework: React with Vite
